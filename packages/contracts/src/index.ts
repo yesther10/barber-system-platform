@@ -3,9 +3,7 @@
  *
  * This package is the single source of truth for request/response shapes,
  * validated at the API edge and later reused by native apps. Domain schemas
- * (auth, catalog, booking, payments, reporting, lgpd) are introduced in the
- * data-layer work unit. Here we only establish the package and a version
- * constant so the toolchain is wired before real schema work begins.
+ * are grouped per domain and re-exported here.
  */
 import { z } from "zod";
 
@@ -28,3 +26,10 @@ export function okHealth(): HealthResponse {
     time: new Date().toISOString(),
   };
 }
+
+export * from "./auth.js";
+export * from "./booking.js";
+export * from "./catalog.js";
+export * from "./lgpd.js";
+export * from "./payments.js";
+export * from "./reporting.js";
