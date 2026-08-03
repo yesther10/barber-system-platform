@@ -41,7 +41,7 @@ The system MUST require an authenticated client to create an appointment, MUST s
 
 ### Requirement: Slot Conflict Prevention
 
-The system MUST prevent overlapping appointments for the same barber with a database exclusion constraint AND MUST re-validate the slot inside the booking transaction. Conflicting bookings MUST be rejected.
+The system MUST prevent overlapping appointments for the same barber. Slot validation MUST happen inside the booking transaction under a lock that serializes concurrent bookings for the same barber (application-level locking). Conflicting bookings MUST be rejected.
 
 #### Scenario: Concurrent double-booking
 
