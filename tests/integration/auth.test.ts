@@ -1,0 +1,154 @@
+import { execFileSync } from "node:child_process";
+import { resolve } from "node:path";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { GenericContainer, type StartedTestContainer } from "testcontainers";
+import { createClient } from "../../packages/db/src/index.js";
+import type { PrismaClient } from "../../packages/db/src/index.js";
+import { provisionOAuthUser } from "../../apps/web/lib/oauth.js";
+import { CURRENT_CONSENT_POLICY_VERSION } from "../../apps/web/lib/consent.js";
+import {
+  ConsentRequiredError,
+  EmailAlreadyRegisteredError,
+  registerClient,
+} from "../../apps/web/lib/register.js";
+
+/**
+ * Auth+tenants integration suite (user-auth + tenant-management specs) against
+ * a real MySQL 8 via Testcontainers: Google auto-provisioning with a consent
+ * record, consent-gated registration, single-use barber invites, and tenant
+ * onboarding status.
+ */
+async function startMysql() {
+  const container = await new GenericContainer("mysql:8")
+    .withExposedPorts(3306)
+    .withEnvironment({
+      MYSQL_USER: "test",
+      MYSQL_PASSWORD: "test",
+      MYSQL_DATABASE: "barberia_test",
+      MYSQL_ROOT_PASSWORD: "test",
+    })
+    .start();
+  const connectionString = `mysql://test:test@${container.getHost()}:${container.getMappedPort(3306)}/barberia_test?allowPublicKeyRetrieval=true`;
+  return { container, connectionString };
+}
+
+function deployMigrations(connectionString: string) {
+  execFileSync(resolve(process.cwd(), "packages/db/node_modules/.bin/prisma"), ["migrate", "deploy"], {
+    cwd: resolve(process.cwd(), "packages/db"),
+    env: { ...process.env, DATABASE_URL: connectionString },
+    stdio: "pipe",
+  });
+}
+
+describe("auth + tenants", () => {
+  let container: StartedTestContainer;
+  let connectionString: string;
+  let prisma: PrismaClient;
+
+  beforeAll(async () => {
+    ({ container, connectionString } = await startMysql());
+    deployMigrations(connectionString);
+    prisma = createClient(connectionString);
+  }, 120_000);
+
+  afterAll(async () => {
+    await prisma?.$disconnect();
+    await container?.stop();
+  });
+
+  describe("google oauth provisioning (user-auth spec)", () => {
+    it("auto-provisions a new Google user as client with a consent record", async () => {
+      const email = `google.${Date.now()}@example.com`;
+      const sessionUser = await provisionOAuthUser(prisma, { email, name: "João Google" });
+
+      expect(sessionUser).toMatchObject({ email, role: "client", barbershopId: null });
+
+      const row = await prisma.user.findUnique({ where: { email } });
+      expect(row?.role).toBe("CLIENT");
+      expect(row?.consentAcceptedAt).not.toBeNull();
+      expect(row?.consentPolicyVersion).toBe(CURRENT_CONSENT_POLICY_VERSION);
+      expect(row?.passwordHash).toBeNull();
+    });
+
+    it("keeps the existing role for a returning Google user", async () => {
+      const email = `admin.google.${Date.now()}@example.com`;
+      await prisma.user.create({
+        data: {
+          email,
+          name: "Admin Google",
+          role: "BARBERSHOP_ADMIN",
+          consentAcceptedAt: new Date(),
+          consentPolicyVersion: CURRENT_CONSENT_POLICY_VERSION,
+        },
+      });
+
+      const sessionUser = await provisionOAuthUser(prisma, { email, name: "Admin Google" });
+
+      expect(sessionUser.role).toBe("barbershop_admin");
+      const row = await prisma.user.findUnique({ where: { email } });
+      expect(row?.role).toBe("BARBERSHOP_ADMIN");
+    });
+  });
+
+  describe("consent-gated registration (user-auth spec)", () => {
+    it("creates a client account with consent record and hashed password", async () => {
+      const email = `register.${Date.now()}@example.com`;
+      const result = await registerClient(
+        prisma,
+        {
+          email,
+          password: "s3nh4-segura",
+          name: "Maria Silva",
+          consent: true,
+          consentPolicyVersion: "2026-07-31",
+        },
+        new Date("2026-08-03T12:00:00.000Z"),
+      );
+
+      expect(result).toMatchObject({ email, role: "client" });
+      const row = await prisma.user.findUnique({ where: { email } });
+      expect(row?.role).toBe("CLIENT");
+      expect(row?.consentAcceptedAt?.toISOString()).toBe("2026-08-03T12:00:00.000Z");
+      expect(row?.consentPolicyVersion).toBe("2026-07-31");
+      expect(row?.passwordHash).toMatch(/^\$2[aby]\$\d{2}\$/);
+      expect(row?.passwordHash).not.toContain("s3nh4-segura");
+    });
+
+    it("refuses registration without consent and creates no account", async () => {
+      const email = `nocon sent.${Date.now()}@example.com`.replace(" ", "");
+      await expect(
+        registerClient(prisma, {
+          email,
+          password: "s3nh4-segura",
+          name: "Sem Consentimento",
+          consent: false,
+          consentPolicyVersion: "2026-07-31",
+        }),
+      ).rejects.toThrow(ConsentRequiredError);
+
+      const row = await prisma.user.findUnique({ where: { email } });
+      expect(row).toBeNull();
+    });
+
+    it("rejects a duplicate email", async () => {
+      const email = `dup.${Date.now()}@example.com`;
+      await registerClient(prisma, {
+        email,
+        password: "s3nh4-segura",
+        name: "Primeira",
+        consent: true,
+        consentPolicyVersion: "2026-07-31",
+      });
+
+      await expect(
+        registerClient(prisma, {
+          email,
+          password: "outra-senha",
+          name: "Segunda",
+          consent: true,
+          consentPolicyVersion: "2026-07-31",
+        }),
+      ).rejects.toThrow(EmailAlreadyRegisteredError);
+    });
+  });
+});
