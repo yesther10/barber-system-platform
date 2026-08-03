@@ -11,6 +11,14 @@ import {
   EmailAlreadyRegisteredError,
   registerClient,
 } from "../../apps/web/lib/register.js";
+import {
+  acceptInvite,
+  createInvite,
+  hashToken,
+  InviteAlreadyUsedError,
+  InviteTokenError,
+  signInviteToken,
+} from "../../apps/web/lib/invites.js";
 
 /**
  * Auth+tenants integration suite (user-auth + tenant-management specs) against
@@ -149,6 +157,83 @@ describe("auth + tenants", () => {
           consentPolicyVersion: "2026-07-31",
         }),
       ).rejects.toThrow(EmailAlreadyRegisteredError);
+    });
+  });
+
+  describe("single-use barber invites (user-auth spec)", () => {
+    const SECRET = "integration-test-invite-secret";
+
+    async function tenantFixture(tag: string) {
+      return prisma.barbershop.create({
+        data: { slug: `invite-shop-${tag}`, name: "Invite Shop", timezone: "America/Sao_Paulo" },
+      });
+    }
+
+    it("accepts a valid invite once and creates a tenant-scoped barber", async () => {
+      const shop = await tenantFixture(`once-${Date.now()}`);
+      const email = `invited.${Date.now()}@example.com`;
+      const token = await createInvite(prisma, { email, barbershopId: shop.id, secret: SECRET });
+
+      const result = await acceptInvite(
+        prisma,
+        {
+          token,
+          name: "Carlos Ferreira",
+          password: "s3nh4-segura",
+          consent: true,
+          consentPolicyVersion: "2026-07-31",
+        },
+        SECRET,
+        new Date("2026-08-03T13:00:00.000Z"),
+      );
+
+      expect(result).toMatchObject({ email, role: "barber", barbershopId: shop.id });
+      const user = await prisma.user.findUnique({ where: { email } });
+      expect(user?.role).toBe("BARBER");
+      expect(user?.barbershopId).toBe(shop.id);
+      expect(user?.consentAcceptedAt?.toISOString()).toBe("2026-08-03T13:00:00.000Z");
+      const profile = await prisma.barber.findUnique({ where: { userId: user?.id ?? "" } });
+      expect(profile?.barbershopId).toBe(shop.id);
+
+      const invite = await prisma.invite.findUnique({ where: { tokenHash: hashToken(token) } });
+      expect(invite?.consumedAt?.toISOString()).toBe("2026-08-03T13:00:00.000Z");
+    });
+
+    it("rejects a reused invite token and creates nothing", async () => {
+      const shop = await tenantFixture(`reuse-${Date.now()}`);
+      const email = `reused.${Date.now()}@example.com`;
+      const token = await createInvite(prisma, { email, barbershopId: shop.id, secret: SECRET });
+      const payload = {
+        token,
+        name: "Carlos Ferreira",
+        password: "s3nh4-segura",
+        consent: true,
+        consentPolicyVersion: "2026-07-31",
+      };
+      await acceptInvite(prisma, payload, SECRET);
+
+      await expect(acceptInvite(prisma, payload, SECRET)).rejects.toThrow(InviteAlreadyUsedError);
+
+      const users = await prisma.user.count({ where: { email } });
+      expect(users).toBe(1);
+      const barbers = await prisma.barber.count({ where: { barbershopId: shop.id } });
+      expect(barbers).toBe(1);
+    });
+
+    it("rejects an expired or forged invite token", async () => {
+      const shop = await tenantFixture(`expired-${Date.now()}`);
+      const email = `expired.${Date.now()}@example.com`;
+      const expired = signInviteToken("inv_nope", email, SECRET, 60_000, Date.now() - 120_000);
+
+      await expect(
+        acceptInvite(
+          prisma,
+          { token: expired, name: "X", password: "s3nh4-segura", consent: true, consentPolicyVersion: "2026-07-31" },
+          SECRET,
+        ),
+      ).rejects.toThrow(InviteTokenError);
+      expect(await prisma.user.count({ where: { email } })).toBe(0);
+      expect(await prisma.barber.count({ where: { barbershopId: shop.id } })).toBe(0);
     });
   });
 });

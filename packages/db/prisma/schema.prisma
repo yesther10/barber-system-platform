@@ -83,6 +83,7 @@ model Barbershop {
   services     Service[]
   barbers      Barber[]
   appointments Appointment[]
+  invites      Invite[]
 
   @@map("Barbershop")
 }
@@ -242,4 +243,18 @@ model PaymentWebhookEvent {
   appointment Appointment? @relation(fields: [appointmentId], references: [id])
 
   @@map("PaymentWebhookEvent")
+}
+
+model Invite {
+  id           String    @id @default(uuid())
+  barbershopId String    @map("barbershop_id")
+  email        String
+  tokenHash    String    @unique @map("token_hash")
+  consumedAt   DateTime? @map("consumed_at")
+  createdAt    DateTime  @default(now()) @map("created_at")
+
+  barbershop Barbershop @relation(fields: [barbershopId], references: [id])
+
+  @@index([barbershopId])
+  @@map("Invite")
 }
