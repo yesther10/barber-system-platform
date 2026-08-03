@@ -2,7 +2,7 @@
 
 Decision needed before apply: Yes
 Chained PRs recommended: Yes
-Chain strategy: pending
+Chain strategy: stacked-to-main (feature branch feat/wu2-data-layer, each work unit stacked)
 400-line budget risk: High
 
 | # | Work unit (PR) | Scope | lines |
@@ -29,11 +29,11 @@ Verify/PR: `pnpm test && pnpm test:integration` (+e2e PR 9).
 
 ## Phase 2: Data layer
 
-- [ ] 2.1 contracts: Zod schemas (auth, catalog, booking, payments, reporting, lgpd)
-- [ ] 2.2 Prisma: all entities; barbershopId scoping
-- [ ] 2.3 btree_gist + no_overlap migration; seed A/B
-- [ ] 2.4 lib/tenant.ts requireTenant()/scope() where-injection
-- [ ] 2.5 Tests: cross-tenant 404; scoped listing (spec)
+- [x] 2.1 contracts: Zod schemas (auth, catalog, booking, payments, reporting, lgpd)
+- [x] 2.2 Prisma: all entities; barbershopId scoping
+- [x] 2.3 btree_gist + no_overlap migration; seed A/B
+- [x] 2.4 lib/tenant.ts requireTenant()/scope() where-injection
+- [x] 2.5 Tests: cross-tenant 404; scoped listing (spec)
 
 ## Phase 3: Auth+Tenants
 
