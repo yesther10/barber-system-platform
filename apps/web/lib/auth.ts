@@ -9,11 +9,11 @@
  */
 import NextAuth from "next-auth";
 import Credentials from "next-auth/providers/credentials";
-import { LoginInput, type Role } from "@barber/contracts";
+import { type Role } from "@barber/contracts";
 import type { User } from "next-auth";
 import { authConfig } from "./auth.config";
 import { getPrisma } from "./db";
-import { verifyPassword } from "./password";
+import { authenticateCredentials } from "./credentials";
 import { provisionOAuthUser } from "./oauth";
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
@@ -22,21 +22,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     ...authConfig.providers,
     Credentials({
       async authorize(credentials) {
-        const parsed = LoginInput.safeParse(credentials);
-        if (!parsed.success) return null;
-        const user = await getPrisma().user.findUnique({
-          where: { email: parsed.data.email },
-        });
-        if (!user?.passwordHash) return null;
-        const valid = await verifyPassword(parsed.data.password, user.passwordHash);
-        if (!valid) return null;
-        return {
-          id: user.id,
-          email: user.email,
-          name: user.name,
-          role: user.role.toLowerCase(),
-          barbershopId: user.barbershopId,
-        } as unknown as User;
+        return (await authenticateCredentials(getPrisma(), credentials)) as unknown as User;
       },
     }),
   ],

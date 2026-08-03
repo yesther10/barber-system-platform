@@ -27,6 +27,7 @@ import {
   requireOnboarded,
   TenantNotFoundError,
 } from "../../apps/web/lib/onboarding.js";
+import { authenticateCredentials } from "../../apps/web/lib/credentials.js";
 
 /**
  * Auth+tenants integration suite (user-auth + tenant-management specs) against
@@ -292,6 +293,38 @@ describe("auth + tenants", () => {
     it("applies the tenant's confirmation mode to new appointments", () => {
       expect(confirmsImmediately("AUTO")).toBe(true);
       expect(confirmsImmediately("MANUAL")).toBe(false);
+    });
+  });
+
+  describe("email/password sign-in (user-auth spec)", () => {
+    it("authenticates a registered user and returns the session user", async () => {
+      const email = `signin.${Date.now()}@example.com`;
+      await registerClient(prisma, {
+        email,
+        password: "s3nh4-segura",
+        name: "Maria Silva",
+        consent: true,
+        consentPolicyVersion: "2026-07-31",
+      });
+
+      const sessionUser = await authenticateCredentials(prisma, { email, password: "s3nh4-segura" });
+
+      expect(sessionUser).toMatchObject({ email, role: "client", barbershopId: null });
+    });
+
+    it("rejects a wrong password", async () => {
+      const email = `signin.wrong.${Date.now()}@example.com`;
+      await registerClient(prisma, {
+        email,
+        password: "s3nh4-segura",
+        name: "Maria Silva",
+        consent: true,
+        consentPolicyVersion: "2026-07-31",
+      });
+
+      await expect(
+        authenticateCredentials(prisma, { email, password: "senha-errada" }),
+      ).resolves.toBeNull();
     });
   });
 });
