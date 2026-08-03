@@ -37,12 +37,12 @@ Verify/PR: `pnpm test && pnpm test:integration` (+e2e PR 9).
 
 ## Phase 3: Auth+Tenants
 
-- [ ] 3.1 lib/auth.ts: Auth.js v5, Credentials+Google, session role+tenant
-- [ ] 3.2 register: consent-gated, refuse without consent (spec)
-- [ ] 3.3 Middleware: /api/admin/* 403; booking 401
-- [ ] 3.4 Invites: single-use token → tenant barber; reused rejected (spec)
-- [ ] 3.5 Onboarding flow; incomplete → guided; policies auto|manual+windows
-- [ ] 3.6 Tests: role 403, consent refusal, Google→client, invite-once (spec)
+- [x] 3.1 lib/auth.ts: Auth.js v5, Credentials+Google, session role+tenant
+- [x] 3.2 register: consent-gated, refuse without consent (spec)
+- [x] 3.3 Middleware: /api/admin/* 403; booking 401
+- [x] 3.4 Invites: single-use token → tenant barber; reused rejected (spec)
+- [x] 3.5 Onboarding flow; incomplete → guided; policies auto|manual+windows
+- [x] 3.6 Tests: role 403, consent refusal, Google→client, invite-once (spec)
 
 ## Phase 4: Catalog+Booking
 
