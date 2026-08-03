@@ -1,0 +1,35 @@
+{
+  "name": "sistema-barberia",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Multi-tenant barbershop scheduling & management platform.",
+  "packageManager": "pnpm@9.15.4",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "build": "turbo run build",
+    "dev": "turbo run dev",
+    "typecheck": "turbo run typecheck",
+    "lint": "turbo run lint",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage",
+    "test:integration": "vitest run --config vitest.integration.config.ts",
+    "test:e2e": "playwright test -c apps/web/playwright.config.ts",
+    "ci": "pnpm typecheck && pnpm lint && pnpm build && pnpm test"
+  },
+  "devDependencies": {
+    "@types/node": "^26.1.2",
+    "@types/pg": "^8.15.0",
+    "@vitest/coverage-v8": "^4.1.10",
+    "@playwright/test": "^1.62.1",
+    "pg": "^8.16.0",
+    "testcontainers": "^12.0.4",
+    "tsx": "^4.19.0",
+    "turbo": "^2.10.8",
+    "typescript": "^5.9.0",
+    "vitest": "^4.1.10"
+  }
+}
