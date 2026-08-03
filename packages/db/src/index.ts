@@ -2,11 +2,46 @@
  * @barber/db — data access for the barbershop platform.
  *
  * Holds the Prisma schema, migrations (including the btree_gist exclusion
- * constraint for slot-conflict prevention) and seed data. Those are added in
- * the data-layer work unit. This bootstrap establishes the package, the
- * tenant-scoping posture helpers it will rely on, and a connectivity probe.
+ * constraint for slot-conflict prevention) and seed data. This package owns
+ * the generated Prisma client and the factory that wires it to Postgres via
+ * the Prisma 7 pg driver adapter. Tenant isolation is enforced at the query
+ * layer by lib/tenant.ts (apps/web) injecting `where: { barbershopId }`.
  */
+import { PrismaPg } from "@prisma/adapter-pg";
 import { z } from "zod";
+import { Prisma, PrismaClient } from "./generated/prisma/client.js";
+
+export { Prisma, PrismaClient };
+export type {
+  Appointment,
+  Barber,
+  BarberService,
+  Barbershop,
+  EmailNotification,
+  PaymentWebhookEvent,
+  Schedule,
+  ScheduleException,
+  Service,
+  User,
+} from "./generated/prisma/client.js";
+export {
+  AppointmentStatus,
+  ConfirmationMode,
+  LateCancelPolicy,
+  NotificationStatus,
+  NotificationType,
+  PaymentStatus,
+  Role,
+} from "./generated/prisma/enums.js";
+
+/**
+ * Creates a PrismaClient wired to Postgres through the pg driver adapter
+ * (Prisma 7 no longer embeds a query engine — the adapter is mandatory).
+ */
+export function createClient(connectionString: string): PrismaClient {
+  const adapter = new PrismaPg({ connectionString });
+  return new PrismaClient({ adapter });
+}
 
 /** How every tenant-scoped query MUST slice the dataset. */
 export interface TenantScope {

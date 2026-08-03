@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { pingDatabase, TENANT_SCOPE_FIELD } from "./index.js";
+import { createClient, pingDatabase, TENANT_SCOPE_FIELD } from "./index.js";
 
 describe("db package", () => {
   it("records the tenant isolation field name", () => {
@@ -19,5 +19,16 @@ describe("db package", () => {
       throw new Error("connection refused");
     });
     expect(ok).toBe(false);
+  });
+
+  it("creates a Prisma client wired to the pg driver adapter", () => {
+    const client = createClient("postgresql://test:test@localhost:5432/test");
+    // Prisma 7 wraps instances in a promise-proxy, so assert the client surface
+    // (model delegates + lifecycle) rather than instanceof.
+    expect(typeof client.$connect).toBe("function");
+    expect(typeof client.$disconnect).toBe("function");
+    expect(typeof client.barbershop.findMany).toBe("function");
+    expect(typeof client.appointment.create).toBe("function");
+    void client.$disconnect();
   });
 });
