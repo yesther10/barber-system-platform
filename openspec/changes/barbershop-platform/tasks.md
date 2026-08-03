@@ -30,10 +30,10 @@ Verify/PR: `pnpm test && pnpm test:integration` (+e2e PR 9).
 ## Phase 2: Data layer
 
 - [x] 2.1 contracts: Zod schemas (auth, catalog, booking, payments, reporting, lgpd)
-- [x] 2.2 Prisma: all entities; barbershopId scoping
-- [x] 2.3 btree_gist + no_overlap migration; seed A/B
+- [x] 2.2 Prisma: all entities; barbershopId scoping (MySQL provider, no @db.Timestamptz, specialties as Json)
+- [x] 2.3 MySQL migration; seed A/B (no btree_gist/no_overlap)
 - [x] 2.4 lib/tenant.ts requireTenant()/scope() where-injection
-- [x] 2.5 Tests: cross-tenant 404; scoped listing (spec)
+- [x] 2.5 Tests: cross-tenant 404; scoped listing; slot inserts (MySQL container; no_overlap test moved to WU5 app lock)
 
 ## Phase 3: Auth+Tenants
 

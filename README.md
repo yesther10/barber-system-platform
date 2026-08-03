@@ -14,7 +14,7 @@ Monorepo for a multi-tenant barbershop scheduling & management platform
 
 ## Tooling
 
-Unit tests: Vitest · Integration: Testcontainers + Postgres · E2E: Playwright.
+Unit tests: Vitest · Integration: Testcontainers + MySQL · E2E: Playwright.
 
 ## Commands
 

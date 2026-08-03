@@ -1,12 +1,15 @@
-// Prisma schema for the barbershop platform (Postgres).
+// Prisma schema for the barbershop platform (MySQL 8).
 //
 // Conventions:
-// - Tables keep the model name (PascalCase, quoted) so raw SQL matches the
-//   design's migration statements (e.g. "Appointment").
-// - Columns are snake_case via @map, matching the btree_gist exclusion
-//   constraint written in raw SQL (barber_id, starts_at, ends_at).
+// - Tables keep the model name (PascalCase) so raw SQL matches the design's
+//   statements (e.g. "Appointment").
+// - Columns are snake_case via @map; DateTime maps to DATETIME(3), Json maps
+//   to JSON, Decimal(10,2) to DECIMAL(10,2), Date to DATE.
+// - `specialties` on Barber is a JSON array (MySQL has no scalar lists).
 // - Every tenant-scoped entity carries `barbershopId`; application queries
 //   MUST inject `{ barbershopId }` via lib/tenant.ts scope().
+// - Slot-conflict prevention is NOT a DB constraint (MySQL has no exclusion
+//   constraints); it is application-level in the booking service (WU5).
 
 generator client {
   provider = "prisma-client"
@@ -14,7 +17,7 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"
+  provider = "mysql"
 }
 
 enum Role {
@@ -73,8 +76,8 @@ model Barbershop {
   reminderLeadHours     Int              @default(24) @map("reminder_lead_hours")
   pixProvider           String?          @map("pix_provider")
   pixCredentials        Json?            @map("pix_credentials")
-  createdAt             DateTime         @default(now()) @map("created_at") @db.Timestamptz(3)
-  updatedAt             DateTime         @updatedAt @map("updated_at") @db.Timestamptz(3)
+  createdAt             DateTime         @default(now()) @map("created_at")
+  updatedAt             DateTime         @updatedAt @map("updated_at")
 
   users        User[]
   services     Service[]
@@ -92,10 +95,10 @@ model User {
   phone                 String?
   role                  Role      @default(CLIENT)
   barbershopId          String?   @map("barbershop_id")
-  consentAcceptedAt     DateTime? @map("consent_accepted_at") @db.Timestamptz(3)
+  consentAcceptedAt     DateTime? @map("consent_accepted_at")
   consentPolicyVersion  String?   @map("consent_policy_version")
-  createdAt             DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
-  updatedAt             DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
+  createdAt             DateTime  @default(now()) @map("created_at")
+  updatedAt             DateTime  @updatedAt @map("updated_at")
 
   barbershop    Barbershop?   @relation(fields: [barbershopId], references: [id])
   barberProfile Barber?
@@ -108,11 +111,11 @@ model Barber {
   id           String   @id @default(uuid())
   barbershopId String   @map("barbershop_id")
   userId       String   @unique @map("user_id")
-  specialties  String[]
+  specialties  Json
   bio          String?
   active       Boolean  @default(true)
-  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
-  updatedAt    DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
 
   barbershop  Barbershop         @relation(fields: [barbershopId], references: [id])
   user        User               @relation(fields: [userId], references: [id])
@@ -132,8 +135,8 @@ model Service {
   priceBRL        Decimal  @map("price_brl") @db.Decimal(10, 2)
   durationMinutes Int      @map("duration_minutes")
   active          Boolean  @default(true)
-  createdAt       DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
-  updatedAt       DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
 
   barbershop     Barbershop       @relation(fields: [barbershopId], references: [id])
   barberServices BarberService[]
@@ -186,16 +189,16 @@ model Appointment {
   barberId          String            @map("barber_id")
   clientId          String            @map("client_id")
   serviceId         String            @map("service_id")
-  startsAt          DateTime          @map("starts_at") @db.Timestamptz(3)
-  endsAt            DateTime          @map("ends_at") @db.Timestamptz(3)
+  startsAt          DateTime          @map("starts_at")
+  endsAt            DateTime          @map("ends_at")
   status            AppointmentStatus @default(PENDING)
   priceSnapshot     Decimal           @map("price_snapshot") @db.Decimal(10, 2)
   paymentStatus     PaymentStatus     @default(PENDING) @map("payment_status")
   providerPaymentId String?           @map("provider_payment_id")
-  noShowAt          DateTime?         @map("no_show_at") @db.Timestamptz(3)
+  noShowAt          DateTime?         @map("no_show_at")
   cancelReason      String?           @map("cancel_reason")
-  createdAt         DateTime          @default(now()) @map("created_at") @db.Timestamptz(3)
-  updatedAt         DateTime          @updatedAt @map("updated_at") @db.Timestamptz(3)
+  createdAt         DateTime          @default(now()) @map("created_at")
+  updatedAt         DateTime          @updatedAt @map("updated_at")
 
   barbershop   Barbershop           @relation(fields: [barbershopId], references: [id])
   barber       Barber               @relation(fields: [barberId], references: [id])
@@ -215,11 +218,11 @@ model EmailNotification {
   type          NotificationType
   status        NotificationStatus @default(QUEUED)
   retryCount    Int                @default(0) @map("retry_count")
-  nextAttemptAt DateTime           @map("next_attempt_at") @db.Timestamptz(3)
+  nextAttemptAt DateTime           @map("next_attempt_at")
   payload       Json?
-  sentAt        DateTime?          @map("sent_at") @db.Timestamptz(3)
-  createdAt     DateTime           @default(now()) @map("created_at") @db.Timestamptz(3)
-  updatedAt     DateTime           @updatedAt @map("updated_at") @db.Timestamptz(3)
+  sentAt        DateTime?          @map("sent_at")
+  createdAt     DateTime           @default(now()) @map("created_at")
+  updatedAt     DateTime           @updatedAt @map("updated_at")
 
   appointment Appointment @relation(fields: [appointmentId], references: [id], onDelete: Cascade)
 
@@ -233,8 +236,8 @@ model PaymentWebhookEvent {
   providerPaymentId String?  @map("provider_payment_id")
   appointmentId     String?  @map("appointment_id")
   payload           Json
-  processedAt       DateTime? @map("processed_at") @db.Timestamptz(3)
-  createdAt         DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  processedAt       DateTime? @map("processed_at")
+  createdAt         DateTime @default(now()) @map("created_at")
 
   appointment Appointment? @relation(fields: [appointmentId], references: [id])
 

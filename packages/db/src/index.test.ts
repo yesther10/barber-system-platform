@@ -21,8 +21,8 @@ describe("db package", () => {
     expect(ok).toBe(false);
   });
 
-  it("creates a Prisma client wired to the pg driver adapter", () => {
-    const client = createClient("postgresql://test:test@localhost:5432/test");
+  it("creates a Prisma client wired to the MySQL (MariaDB) driver adapter", () => {
+    const client = createClient("mysql://test:test@localhost:3306/test");
     // Prisma 7 wraps instances in a promise-proxy, so assert the client surface
     // (model delegates + lifecycle) rather than instanceof.
     expect(typeof client.$connect).toBe("function");
