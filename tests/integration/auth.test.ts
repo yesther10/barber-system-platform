@@ -19,6 +19,14 @@ import {
   InviteTokenError,
   signInviteToken,
 } from "../../apps/web/lib/invites.js";
+import {
+  confirmsImmediately,
+  getOnboardingSnapshot,
+  OnboardingIncompleteError,
+  onboardingStatus,
+  requireOnboarded,
+  TenantNotFoundError,
+} from "../../apps/web/lib/onboarding.js";
 
 /**
  * Auth+tenants integration suite (user-auth + tenant-management specs) against
@@ -234,6 +242,56 @@ describe("auth + tenants", () => {
       ).rejects.toThrow(InviteTokenError);
       expect(await prisma.user.count({ where: { email } })).toBe(0);
       expect(await prisma.barber.count({ where: { barbershopId: shop.id } })).toBe(0);
+    });
+  });
+
+  describe("tenant onboarding (tenant-management spec)", () => {
+    async function tenantFixture(tag: string, mode: "AUTO" | "MANUAL" = "AUTO") {
+      return prisma.barbershop.create({
+        data: { slug: `onboard-shop-${tag}`, name: "Onboard Shop", timezone: "America/Sao_Paulo", confirmationMode: mode },
+      });
+    }
+
+    it("guides an incomplete tenant through the missing setup steps", async () => {
+      const shop = await tenantFixture(`incomplete-${Date.now()}`);
+      const snapshot = await getOnboardingSnapshot(prisma, shop.id);
+
+      expect(snapshot).toMatchObject({ serviceCount: 0, barberCount: 0, scheduleCount: 0, pixProvider: null });
+      const status = onboardingStatus(snapshot);
+      expect(status.complete).toBe(false);
+      expect(status.missing).toEqual(["services", "barbers", "schedules", "pix"]);
+      expect(status.nextStep).toBe("services");
+
+      await expect(requireOnboarded(prisma, shop.id)).rejects.toThrow(OnboardingIncompleteError);
+    });
+
+    it("marks a tenant with full setup as complete and usable", async () => {
+      const shop = await tenantFixture(`complete-${Date.now()}`, "MANUAL");
+      const barberUser = await prisma.user.create({
+        data: { email: `onboard.barber.${Date.now()}@example.com`, name: "B", role: "BARBER", barbershopId: shop.id },
+      });
+      await prisma.barber.create({ data: { barbershopId: shop.id, userId: barberUser.id, specialties: ["corte"] } });
+      await prisma.service.create({ data: { barbershopId: shop.id, name: "Corte", priceBRL: 40, durationMinutes: 30 } });
+      const barber = await prisma.barber.findUniqueOrThrow({ where: { userId: barberUser.id } });
+      await prisma.schedule.create({
+        data: { barberId: barber.id, dayOfWeek: 2, startTime: "09:00", endTime: "18:00" },
+      });
+      await prisma.barbershop.update({ where: { id: shop.id }, data: { pixProvider: "mercadopago" } });
+
+      const snapshot = await getOnboardingSnapshot(prisma, shop.id);
+      expect(snapshot).toMatchObject({ serviceCount: 1, barberCount: 1, scheduleCount: 1, pixProvider: "mercadopago" });
+      expect(snapshot.confirmationMode).toBe("MANUAL");
+      expect(onboardingStatus(snapshot).complete).toBe(true);
+      await expect(requireOnboarded(prisma, shop.id)).resolves.toBeUndefined();
+    });
+
+    it("returns 404-equivalent for an unknown tenant", async () => {
+      await expect(getOnboardingSnapshot(prisma, "no-such-tenant")).rejects.toThrow(TenantNotFoundError);
+    });
+
+    it("applies the tenant's confirmation mode to new appointments", () => {
+      expect(confirmsImmediately("AUTO")).toBe(true);
+      expect(confirmsImmediately("MANUAL")).toBe(false);
     });
   });
 });
