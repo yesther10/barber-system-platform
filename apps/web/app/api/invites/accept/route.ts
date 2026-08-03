@@ -4,6 +4,7 @@ import {
   acceptInvite,
   InviteAlreadyUsedError,
   InviteConsentRequiredError,
+  InviteEmailTakenError,
   InviteTokenError,
 } from "@/lib/invites";
 
@@ -37,7 +38,7 @@ export async function POST(request: Request) {
     if (err instanceof InviteConsentRequiredError || err instanceof InviteTokenError) {
       return NextResponse.json({ error: err.code }, { status: 400 });
     }
-    if (err instanceof InviteAlreadyUsedError) {
+    if (err instanceof InviteAlreadyUsedError || err instanceof InviteEmailTakenError) {
       return NextResponse.json({ error: err.code }, { status: 409 });
     }
     throw err;

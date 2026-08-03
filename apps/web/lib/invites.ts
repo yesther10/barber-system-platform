@@ -44,6 +44,16 @@ export class InviteConsentRequiredError extends Error {
   readonly code = "CONSENT_REQUIRED" as const;
 }
 
+/** Thrown when the invite's email already belongs to an existing account. */
+export class InviteEmailTakenError extends Error {
+  readonly code = "EMAIL_ALREADY_REGISTERED" as const;
+
+  constructor(message = "An account already exists for this email") {
+    super(message);
+    this.name = "InviteEmailTakenError";
+  }
+}
+
 /** HMAC-SHA256 signature of the token body. */
 function signature(body: string, secret: string): string {
   return createHmac("sha256", secret).update(body).digest("base64url");
@@ -167,6 +177,9 @@ export async function acceptInvite(
     if (invite.email !== verified.email || invite.id !== verified.inviteId) {
       throw new InviteTokenError("Invite token does not match the invite row");
     }
+
+    const existing = await tx.user.findUnique({ where: { email: invite.email } });
+    if (existing) throw new InviteEmailTakenError();
 
     const user = await tx.user.create({
       data: {

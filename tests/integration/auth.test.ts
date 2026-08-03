@@ -16,6 +16,7 @@ import {
   createInvite,
   hashToken,
   InviteAlreadyUsedError,
+  InviteEmailTakenError,
   InviteTokenError,
   signInviteToken,
 } from "../../apps/web/lib/invites.js";
@@ -227,6 +228,29 @@ describe("auth + tenants", () => {
       expect(users).toBe(1);
       const barbers = await prisma.barber.count({ where: { barbershopId: shop.id } });
       expect(barbers).toBe(1);
+    });
+
+    it("rejects an invite whose email already has an account", async () => {
+      const shop = await tenantFixture(`email-taken-${Date.now()}`);
+      const email = `taken.${Date.now()}@example.com`;
+      await prisma.user.create({
+        data: { email, name: "Existing User", role: "CLIENT" },
+      });
+      const token = await createInvite(prisma, { email, barbershopId: shop.id, secret: SECRET });
+      const payload = {
+        token,
+        name: "Carlos Ferreira",
+        password: "s3nh4-segura",
+        consent: true,
+        consentPolicyVersion: "2026-07-31",
+      };
+
+      await expect(acceptInvite(prisma, payload, SECRET)).rejects.toThrow(InviteEmailTakenError);
+
+      const barbers = await prisma.barber.count({ where: { barbershopId: shop.id } });
+      expect(barbers).toBe(0);
+      const invite = await prisma.invite.findUnique({ where: { tokenHash: hashToken(token) } });
+      expect(invite?.consumedAt).toBeNull();
     });
 
     it("rejects an expired or forged invite token", async () => {
