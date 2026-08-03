@@ -9,22 +9,25 @@ import { seedDatabase } from "../../packages/db/prisma/seed.js";
 
 /**
  * Data-layer integration suite (tenant-management + booking specs) against a
- * real Postgres via Testcontainers:
- * 1. deploys the committed migrations (incl. btree_gist no_overlap),
+ * real MySQL 8 via Testcontainers:
+ * 1. deploys the committed migrations,
  * 2. runs the A/B seed,
- * 3. proves tenant isolation (scoped listing, cross-tenant 404) and the
- *    DB-enforced slot-conflict constraint.
+ * 3. proves tenant isolation (scoped listing, cross-tenant 404) and that
+ *    slot inserts work. Slot-conflict prevention is application-level
+ *    (SELECT ... FOR UPDATE + transactional re-validation) and ships with
+ *    WU5 (booking service) — MySQL has no exclusion constraints.
  */
-async function startPostgres() {
-  const container = await new GenericContainer("postgres:16-alpine")
-    .withExposedPorts(5432)
+async function startMysql() {
+  const container = await new GenericContainer("mysql:8")
+    .withExposedPorts(3306)
     .withEnvironment({
-      POSTGRES_USER: "test",
-      POSTGRES_PASSWORD: "test",
-      POSTGRES_DB: "barberia_test",
+      MYSQL_USER: "test",
+      MYSQL_PASSWORD: "test",
+      MYSQL_DATABASE: "barberia_test",
+      MYSQL_ROOT_PASSWORD: "test",
     })
     .start();
-  const connectionString = `postgresql://test:test@${container.getHost()}:${container.getMappedPort(5432)}/barberia_test`;
+  const connectionString = `mysql://test:test@${container.getHost()}:${container.getMappedPort(3306)}/barberia_test?allowPublicKeyRetrieval=true`;
   return { container, connectionString };
 }
 
@@ -43,7 +46,7 @@ describe("data layer", () => {
   let seeded: Awaited<ReturnType<typeof seedDatabase>>;
 
   beforeAll(async () => {
-    ({ container, connectionString } = await startPostgres());
+    ({ container, connectionString } = await startMysql());
     deployMigrations(connectionString);
     prisma = createClient(connectionString);
     seeded = await seedDatabase(prisma);
@@ -85,7 +88,12 @@ describe("data layer", () => {
     });
   });
 
-  describe("slot conflict prevention (booking spec)", () => {
+  // Slot-conflict prevention moves to WU5 (booking service app lock:
+  // SELECT ... FOR UPDATE on the barber + transactional re-validation).
+  // These tests only prove that non-conflicting inserts land correctly;
+  // the overlapping-insert rejection test was removed because MySQL has
+  // no exclusion constraints (see design.md Decision 4).
+  describe("slot inserts (conflict prevention moves to WU5 app lock)", () => {
     async function slotFixture(tag: string) {
       const shop = await prisma.barbershop.create({
         data: {
@@ -118,38 +126,6 @@ describe("data layer", () => {
       });
       return { shop, barber, client, service };
     }
-
-    it("rejects an overlapping appointment for the same barber", async () => {
-      const f = await slotFixture("overlap");
-      await prisma.appointment.create({
-        data: {
-          barbershopId: f.shop.id,
-          barberId: f.barber.id,
-          clientId: f.client.id,
-          serviceId: f.service.id,
-          startsAt: new Date("2026-09-01T13:00:00.000Z"),
-          endsAt: new Date("2026-09-01T14:00:00.000Z"),
-          priceSnapshot: 40,
-        },
-      });
-      const overlap = prisma.appointment.create({
-        data: {
-          barbershopId: f.shop.id,
-          barberId: f.barber.id,
-          clientId: f.client.id,
-          serviceId: f.service.id,
-          startsAt: new Date("2026-09-01T13:30:00.000Z"),
-          endsAt: new Date("2026-09-01T14:30:00.000Z"),
-          priceSnapshot: 40,
-        },
-      });
-      // Prisma 7 reports exclusion-constraint violations as P2039 (23P01),
-      // with the constraint name in the driver-adapter error message.
-      await expect(overlap).rejects.toMatchObject({
-        code: "P2039",
-        meta: { driverAdapterError: { cause: { message: expect.stringContaining('"no_overlap"') } } },
-      });
-    });
 
     it("allows adjacent non-overlapping appointments for the same barber", async () => {
       const f = await slotFixture("adjacent");
