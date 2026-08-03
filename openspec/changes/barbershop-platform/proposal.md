@@ -40,7 +40,7 @@ None (greenfield).
 
 ## Approach
 
-Monorepo: `apps/web` (Next.js + TS), `apps/worker` (cron: outbox + reminders), `packages/contracts` (Zod, future mobile), `packages/db` (Prisma + Postgres). Multi-tenant: `Barbershop` root aggregate, `barbershop_id` on all entities, scoped queries. Slot conflicts: Postgres exclusion constraint (btree_gist) + transactional re-validation. Idempotent webhooks. Resend + React Email via outbox. Supabase SP region (LGPD).
+Monorepo: `apps/web` (Next.js + TS), `apps/worker` (cron: outbox + reminders), `packages/contracts` (Zod, future mobile), `packages/db` (Prisma + MySQL). Multi-tenant: `Barbershop` root aggregate, `barbershop_id` on all entities, scoped queries. Slot conflicts: app-level lock (`SELECT ... FOR UPDATE` on barber) + transactional re-validation (MySQL has no exclusion constraints). Idempotent webhooks. Resend + React Email via outbox. DB hosted in Brazil region (LGPD).
 
 ## Affected Areas
 
@@ -66,7 +66,7 @@ Feature flags per tenant; reversible migrations; disable Pix webhook → manual 
 
 ## Dependencies
 
-Payment provider, Postgres (Supabase SP), Resend, Auth.js v5, Next.js, Prisma.
+Payment provider, MySQL, Resend, Auth.js v5, Next.js, Prisma.
 
 ## Success Criteria
 
