@@ -31,6 +31,7 @@ import {
   WindowOrderError,
 } from "../../apps/web/lib/catalog.js";
 import { TenantNotFoundError } from "../../apps/web/lib/onboarding.js";
+import { getSlotGrid, PastDateError } from "../../apps/web/lib/slots.js";
 
 /**
  * Catalog integration suite (catalog spec) against a real MySQL 8 via
@@ -337,6 +338,112 @@ describe("catalog admin CRUD", () => {
 
     it("public services listing 404s for an unknown tenant slug", async () => {
       await expect(getPublicServices(prisma, "nao-existe")).rejects.toThrow(TenantNotFoundError);
+    });
+  });
+
+  describe("public slots API (booking spec, task 4.3)", () => {
+    /** A fully scheduled Wednesday shift: local 09:00-17:00 = UTC 12:00-20:00. */
+    async function slotShop(tag: string) {
+      const f = await shopFixture(prisma, `pub-${tag}`);
+      const service = await createService(prisma, f.shop.id, {
+        name: "Corte",
+        priceBRL: 45,
+        durationMinutes: 30,
+      });
+      const barber = await createBarber(prisma, f.shop.id, { userId: f.barberUser.id, specialties: ["corte"] });
+      await createSchedule(prisma, f.shop.id, {
+        barberId: barber.id,
+        dayOfWeek: 3, // Wednesday
+        startTime: "09:00",
+        endTime: "17:00",
+      });
+      return { ...f, service, barber };
+    }
+
+    it("projects the full grid for a scheduled barber (09:00-16:30 local)", async () => {
+      const f = await slotShop("grid");
+      const grid = await getSlotGrid(
+        prisma,
+        { barbershopSlug: f.shop.slug, serviceId: f.service.id, barberId: f.barber.id, date: "2026-10-07" },
+        new Date("2026-10-06T12:00:00.000Z"),
+      );
+      expect(grid.date).toBe("2026-10-07");
+      expect(grid.slots).toHaveLength(16);
+      expect(grid.slots[0]).toBe("2026-10-07T12:00:00.000Z");
+      expect(grid.slots[15]).toBe("2026-10-07T19:30:00.000Z");
+    });
+
+    it("carves out an existing appointment from the grid", async () => {
+      const f = await slotShop("carve");
+      const client = await prisma.user.create({
+        data: { email: "pub.client.carve@example.com", name: "C", role: "CLIENT", barbershopId: f.shop.id },
+      });
+      await prisma.appointment.create({
+        data: {
+          barbershopId: f.shop.id,
+          barberId: f.barber.id,
+          clientId: client.id,
+          serviceId: f.service.id,
+          startsAt: new Date("2026-10-07T13:00:00.000Z"),
+          endsAt: new Date("2026-10-07T13:30:00.000Z"),
+          priceSnapshot: 45,
+        },
+      });
+      const grid = await getSlotGrid(
+        prisma,
+        { barbershopSlug: f.shop.slug, serviceId: f.service.id, barberId: f.barber.id, date: "2026-10-07" },
+        new Date("2026-10-06T12:00:00.000Z"),
+      );
+      expect(grid.slots).toHaveLength(15);
+      expect(grid.slots).not.toContain("2026-10-07T13:00:00.000Z");
+    });
+
+    it("returns an empty grid when a day-off exception covers the shift", async () => {
+      const f = await slotShop("dayoff");
+      await createException(prisma, f.shop.id, {
+        barberId: f.barber.id,
+        date: "2026-10-07",
+        startTime: "09:00",
+        endTime: "17:00",
+      });
+      const grid = await getSlotGrid(
+        prisma,
+        { barbershopSlug: f.shop.slug, serviceId: f.service.id, barberId: f.barber.id, date: "2026-10-07" },
+        new Date("2026-10-06T12:00:00.000Z"),
+      );
+      expect(grid.slots).toEqual([]);
+    });
+
+    it("rejects a past date with an error", async () => {
+      const f = await slotShop("past");
+      await expect(
+        getSlotGrid(
+          prisma,
+          { barbershopSlug: f.shop.slug, serviceId: f.service.id, barberId: f.barber.id, date: "2026-10-05" },
+          new Date("2026-10-06T12:00:00.000Z"),
+        ),
+      ).rejects.toThrow(PastDateError);
+    });
+
+    it("404s for unknown tenant slug and invisible (inactive) resources", async () => {
+      const f = await slotShop("hidden");
+      const query = {
+        barbershopSlug: f.shop.slug,
+        serviceId: f.service.id,
+        barberId: f.barber.id,
+        date: "2026-10-07",
+      } as const;
+      const now = new Date("2026-10-06T12:00:00.000Z");
+
+      await expect(
+        getSlotGrid(prisma, { ...query, barbershopSlug: "nao-existe" }, now),
+      ).rejects.toThrow(TenantNotFoundError);
+
+      await updateService(prisma, f.shop.id, f.service.id, { active: false });
+      await expect(getSlotGrid(prisma, query, now)).rejects.toThrow(ServiceNotFoundError);
+      await updateService(prisma, f.shop.id, f.service.id, { active: true });
+      await updateBarber(prisma, f.shop.id, f.barber.id, { active: false });
+      await expect(getSlotGrid(prisma, query, now)).rejects.toThrow(BarberNotFoundError);
     });
   });
 });
