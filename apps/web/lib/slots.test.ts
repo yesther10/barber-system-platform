@@ -53,7 +53,7 @@ describe("projectSlots — full day grid (booking spec)", () => {
   const fullDay = {
     date: WEDNESDAY,
     timezone: SAO_PAULO,
-    granularity: 30,
+    granularity: 30 as const,
     durationMinutes: 30,
     schedule: [{ dayOfWeek: 3, startTime: "09:00", endTime: "17:00" }],
     exceptions: [],
