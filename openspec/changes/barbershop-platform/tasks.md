@@ -46,12 +46,12 @@ Verify/PR: `pnpm test && pnpm test:integration` (+e2e PR 9).
 
 ## Phase 4: Catalog+Booking
 
-- [ ] 4.1 CRUD services/barbers/schedules/exceptions; deactivate → unbookable (spec)
-- [ ] 4.2 lib/slots.ts: schedule−exceptions−appointments; 15|30; fit duration; past date error
-- [ ] 4.3 Public API: GET services + slots (Zod)
-- [ ] 4.4 POST /api/bookings: auth, snapshot, tx appointment+outbox, revalidate slot
-- [ ] 4.5 Lifecycle + reschedule/cancel: window rules, atomic slot move, outbox
-- [ ] 4.6 Tests: double-booking one-409, slot grid, invalid transitions (spec)
+- [x] 4.1 CRUD services/barbers/schedules/exceptions; deactivate → unbookable (spec)
+- [x] 4.2 lib/slots.ts: schedule−exceptions−appointments; 15|30; fit duration; past date error
+- [x] 4.3 Public API: GET services + slots (Zod)
+- [x] 4.4 POST /api/bookings: auth, snapshot, tx appointment+outbox, revalidate slot
+- [x] 4.5 Lifecycle + reschedule/cancel: window rules, atomic slot move, outbox
+- [x] 4.6 Tests: double-booking one-409, slot grid, invalid transitions (spec)
 
 ## Phase 5: Payments+Worker
 
