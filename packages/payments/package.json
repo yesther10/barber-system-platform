@@ -19,5 +19,10 @@
   "devDependencies": {
     "@types/node": "^26.1.2",
     "typescript": "^5.9.0"
+  },
+  "dependencies": {
+    "@barber/contracts": "workspace:*",
+    "@barber/db": "workspace:*",
+    "mercadopago": "^2.8.0"
   }
 }
