@@ -1,6 +1,6 @@
 import { createClient, type PrismaClient } from "@barber/db";
 import { NotificationStatus, NotificationType } from "@barber/db";
-import { createMercadoPagoProvider, type PixProvider } from "@barber/payments";
+import { createMercadoPagoProvider, parseMercadoPagoCredentials, reconcilePayment, type PixProvider } from "@barber/payments";
 import { Resend } from "resend";
 import { buildNotificationEmail, computeRetryBackoff, DELIVERABLE_STATUSES, mapPaymentStatus, type EmailMessage } from "./notifications.js";
 
@@ -113,7 +113,30 @@ export async function reminderScan(deps?: WorkerDependencies): Promise<ScanResul
 }
 
 export async function paymentReconcileScan(deps?: WorkerDependencies): Promise<ScanResult> {
-  return { scan: "payment-reconcile", handled: 0, ranAt: deps?.now ?? new Date() };
+  if (!deps) return { scan: "payment-reconcile", handled: 0, ranAt: new Date() };
+  const now = deps.now ?? new Date();
+  const threshold = new Date(now.getTime() - 10 * 60_000);
+  const appointments = await deps.db.appointment.findMany({
+    where: {
+      paymentStatus: "PENDING",
+      providerPaymentId: { not: null },
+      createdAt: { lte: threshold },
+    },
+    include: { barbershop: true },
+  });
+
+  let handled = 0;
+  for (const appointment of appointments) {
+    const credentials = parseMercadoPagoCredentials(appointment.barbershop.pixCredentials);
+    if (!credentials || !appointment.providerPaymentId) continue;
+    const provider = deps.paymentProviderFactory(credentials);
+    const result = await reconcilePayment(deps.db, provider, {
+      providerPaymentId: appointment.providerPaymentId,
+      now,
+    });
+    if (result) handled += 1;
+  }
+  return { scan: "payment-reconcile", handled, ranAt: now };
 }
 
 export async function runCronCycle(deps?: WorkerDependencies): Promise<ScanResult[]> {
