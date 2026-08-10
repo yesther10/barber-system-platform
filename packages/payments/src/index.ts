@@ -171,3 +171,5 @@ export function createMercadoPagoProvider(
 }
 
 export const PIX_PROVIDER_CONTRACT = "0.0.2" as const;
+
+export * from "./service.js";
