@@ -9,6 +9,7 @@ export default defineConfig({
       "packages/*/src/**/*.test.ts",
       "apps/worker/src/**/*.test.ts",
       "apps/web/lib/**/*.test.ts",
+      "tests/unit/**/*.test.ts",
     ],
     environment: "node",
     coverage: {

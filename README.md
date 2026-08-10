@@ -28,7 +28,13 @@ Unit tests: Vitest · Integration: Testcontainers + MySQL · E2E: Playwright.
 | `pnpm test` | unit tests (Vitest) |
 | `pnpm test:integration` | integration tests (Testcontainers; requires Docker) |
 | `pnpm test:e2e` | E2E tests (Playwright Chromium) |
+| `pnpm verify:full` | full verified runtime sweep: `pnpm test && pnpm test:integration && pnpm test:e2e && pnpm typecheck && pnpm lint && pnpm build` |
 | `pnpm ci` | typecheck + lint + build + unit |
 
 Requires Node ≥ 20 and Docker for integration tests. pnpm is managed via
 Corepack (`packageManager` field).
+
+## Full verification prerequisites
+
+- Docker for integration tests (`pnpm test:integration`)
+- Playwright browsers for E2E: `pnpm exec playwright install --with-deps chromium`
