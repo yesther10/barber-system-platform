@@ -44,6 +44,9 @@ importers:
       '@barber/db':
         specifier: workspace:^
         version: link:../../packages/db
+      '@barber/payments':
+        specifier: workspace:*
+        version: link:../../packages/payments
       bcryptjs:
         specifier: ^3.0.3
         version: 3.0.3
