@@ -13,6 +13,7 @@ import {
 } from "../../packages/payments/src/service.js";
 import {
   outboxScan,
+  paymentReconcileScan,
   reminderScan,
   type WorkerDependencies,
 } from "../../apps/worker/src/index.js";
@@ -390,4 +391,27 @@ describe("payments + worker", () => {
     expect(reminders).toHaveLength(0);
   });
 
+  it("reconciles aged pending payments when webhooks are lost", async () => {
+    const f = await createOnboardedShop(prisma, `reconcile-${Date.now()}`);
+    const appointment = await createBooking(prisma, { clientId: f.client.id, now: NOW }, { serviceId: f.service.id, barberId: f.barber.id, startsAt: SLOT });
+    await prisma.appointment.update({
+      where: { id: appointment.id },
+      data: {
+        providerPaymentId: "pay_reconcile",
+        createdAt: new Date("2026-10-06T11:30:00.000Z"),
+      },
+    });
+    const provider = fakeProvider({}, { appointmentId: appointment.id, providerId: "pay_reconcile" });
+
+    const result = await paymentReconcileScan({
+      db: prisma,
+      now: NOW,
+      sendEmail: vi.fn(),
+      paymentProviderFactory: () => provider,
+    });
+
+    expect(result.handled).toBe(1);
+    const paid = await prisma.appointment.findUniqueOrThrow({ where: { id: appointment.id } });
+    expect(paid.paymentStatus).toBe(PaymentStatus.PAID);
+  });
 });
