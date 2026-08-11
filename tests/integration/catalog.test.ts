@@ -31,6 +31,7 @@ import {
   WindowOrderError,
 } from "../../apps/web/lib/catalog.js";
 import { TenantNotFoundError } from "../../apps/web/lib/onboarding.js";
+import { generateReport, renderReportCsv } from "../../apps/web/lib/reporting.js";
 import { getSlotGrid, PastDateError } from "../../apps/web/lib/slots.js";
 
 /**
@@ -444,6 +445,159 @@ describe("catalog admin CRUD", () => {
       await updateService(prisma, f.shop.id, f.service.id, { active: true });
       await updateBarber(prisma, f.shop.id, f.barber.id, { active: false });
       await expect(getSlotGrid(prisma, query, now)).rejects.toThrow(BarberNotFoundError);
+    });
+  });
+
+  describe("reporting (reporting spec, task 6.1)", () => {
+    it("aggregates week-one counts/rates/revenue by barber and service", async () => {
+      const f = await shopFixture(prisma, "reporting");
+      const barberA = await createBarber(prisma, f.shop.id, { userId: f.barberUser.id, specialties: ["corte"] });
+      const barberUserB = await prisma.user.create({
+        data: { email: "cat.barber.reporting.2@example.com", name: "Bruno", role: "BARBER", barbershopId: f.shop.id },
+      });
+      const barberB = await createBarber(prisma, f.shop.id, { userId: barberUserB.id, specialties: ["barba"] });
+      const corte = await createService(prisma, f.shop.id, { name: "Corte", priceBRL: 45, durationMinutes: 30 });
+      const barba = await createService(prisma, f.shop.id, { name: "Barba", priceBRL: 30, durationMinutes: 20 });
+      const client = await prisma.user.create({
+        data: { email: "cat.client.reporting@example.com", name: "Cliente", role: "CLIENT", barbershopId: f.shop.id },
+      });
+
+      await prisma.appointment.createMany({
+        data: [
+          {
+            barbershopId: f.shop.id,
+            barberId: barberA.id,
+            clientId: client.id,
+            serviceId: corte.id,
+            startsAt: new Date("2026-10-01T13:00:00.000Z"),
+            endsAt: new Date("2026-10-01T13:30:00.000Z"),
+            status: "COMPLETED",
+            paymentStatus: "PAID",
+            priceSnapshot: 45,
+          },
+          {
+            barbershopId: f.shop.id,
+            barberId: barberA.id,
+            clientId: client.id,
+            serviceId: corte.id,
+            startsAt: new Date("2026-10-02T13:00:00.000Z"),
+            endsAt: new Date("2026-10-02T13:30:00.000Z"),
+            status: "CONFIRMED",
+            paymentStatus: "PENDING",
+            priceSnapshot: 45,
+          },
+          {
+            barbershopId: f.shop.id,
+            barberId: barberB.id,
+            clientId: client.id,
+            serviceId: barba.id,
+            startsAt: new Date("2026-10-03T13:00:00.000Z"),
+            endsAt: new Date("2026-10-03T13:20:00.000Z"),
+            status: "CANCELLED",
+            paymentStatus: "REFUNDED",
+            priceSnapshot: 30,
+          },
+          {
+            barbershopId: f.shop.id,
+            barberId: barberB.id,
+            clientId: client.id,
+            serviceId: barba.id,
+            startsAt: new Date("2026-10-10T13:00:00.000Z"),
+            endsAt: new Date("2026-10-10T13:20:00.000Z"),
+            status: "COMPLETED",
+            paymentStatus: "PAID",
+            priceSnapshot: 30,
+          },
+        ],
+      });
+
+      const byBarber = await generateReport(prisma, f.shop.id, {
+        from: "2026-10-01",
+        to: "2026-10-07",
+        groupBy: "barber",
+      });
+      expect(byBarber.rows).toEqual([
+        {
+          groupKey: "Bruno",
+          total: 1,
+          pending: 0,
+          confirmed: 0,
+          completed: 0,
+          cancelled: 1,
+          completionRate: 0,
+          cancellationRate: 1,
+          revenueBRL: 0,
+        },
+        {
+          groupKey: "Carlos",
+          total: 2,
+          pending: 0,
+          confirmed: 1,
+          completed: 1,
+          cancelled: 0,
+          completionRate: 0.5,
+          cancellationRate: 0,
+          revenueBRL: 45,
+        },
+      ]);
+
+      const byService = await generateReport(prisma, f.shop.id, {
+        from: "2026-10-01",
+        to: "2026-10-07",
+        groupBy: "service",
+      });
+      expect(byService.rows).toEqual([
+        {
+          groupKey: "Barba",
+          total: 1,
+          pending: 0,
+          confirmed: 0,
+          completed: 0,
+          cancelled: 1,
+          completionRate: 0,
+          cancellationRate: 1,
+          revenueBRL: 0,
+        },
+        {
+          groupKey: "Corte",
+          total: 2,
+          pending: 0,
+          confirmed: 1,
+          completed: 1,
+          cancelled: 0,
+          completionRate: 0.5,
+          cancellationRate: 0,
+          revenueBRL: 45,
+        },
+      ]);
+    });
+
+    it("returns zeroed empty periods and emits CSV with BOM", async () => {
+      const f = await shopFixture(prisma, "reporting-empty");
+
+      const report = await generateReport(prisma, f.shop.id, {
+        from: "2026-11-01",
+        to: "2026-11-07",
+        groupBy: "none",
+      });
+
+      expect(report.rows).toEqual([
+        {
+          groupKey: "all",
+          total: 0,
+          pending: 0,
+          confirmed: 0,
+          completed: 0,
+          cancelled: 0,
+          completionRate: 0,
+          cancellationRate: 0,
+          revenueBRL: 0,
+        },
+      ]);
+
+      expect(renderReportCsv(report).startsWith("\uFEFF")).toBe(true);
+      expect(renderReportCsv(report)).toContain("groupKey,total,pending,confirmed,completed,cancelled,completionRate,cancellationRate,revenueBRL");
+      expect(renderReportCsv(report)).toContain("all,0,0,0,0,0,0.00,0.00,0.00");
     });
   });
 });

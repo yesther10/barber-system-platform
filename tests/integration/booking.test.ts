@@ -220,7 +220,10 @@ describe("booking lifecycle", () => {
       expect(moved.endsAt).toBe("2026-10-07T15:30:00.000Z");
       expect(moved.status).toBe("confirmed");
 
-      const outbox = await prisma.emailNotification.findMany({ where: { appointmentId: created.id } });
+      const outbox = await prisma.emailNotification.findMany({
+        where: { appointmentId: created.id },
+        orderBy: { createdAt: "asc" },
+      });
       expect(outbox.map((n) => n.type)).toEqual(["CONFIRMATION", "RESCHEDULE"]);
 
       // the old slot is free again → a new booking there succeeds
