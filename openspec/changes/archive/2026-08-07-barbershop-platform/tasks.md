@@ -55,16 +55,16 @@ Verify/PR: `pnpm test && pnpm test:integration` (+e2e PR 9).
 
 ## Phase 5: Payments+Worker
 
-- [ ] 5.1 packages/payments: PixProvider + mercadoPago adapter
-- [ ] 5.2 payments/:id/pix: pending+QR; failure keeps appointment
-- [ ] 5.3 Webhook HMAC→fetch→idempotent (UNIQUE); paid→confirmed; manual paid
-- [ ] 5.4 Worker: PT-BR emails→Resend, backoff; reminderScan once; reconcile
-- [ ] 5.5 Tests: webhook dup no-change, crash-after-commit, reminder once (spec)
+- [x] 5.1 packages/payments: PixProvider + mercadoPago adapter
+- [x] 5.2 payments/:id/pix: pending+QR; failure keeps appointment
+- [x] 5.3 Webhook HMAC→fetch→idempotent (UNIQUE); paid→confirmed; manual paid
+- [x] 5.4 Worker: PT-BR emails→Resend, backoff; reminderScan once; reconcile
+- [x] 5.5 Tests: webhook dup no-change, crash-after-commit, reminder once (spec)
 
 ## Phase 6: LGPD+Hardening
 
-- [ ] 6.1 Reports: counts by barber/service, rates, zeroed empty; revenue; CSV+BOM (spec)
-- [ ] 6.2 PT-BR privacy policy page; withdrawal stops non-essential processing (spec)
-- [ ] 6.3 me/export JSON; me/delete: cancel future, anonymize PII, keep legal rows (spec)
-- [ ] 6.4 E2E: browse→login→book→QR; admin→book; cancel windows; 409
-- [ ] 6.5 Full verify: scenario audit, README, suites green
+- [x] 6.1 Reports: counts by barber/service, rates, zeroed empty; revenue; CSV+BOM (spec)
+- [x] 6.2 PT-BR privacy policy page; withdrawal stops non-essential processing (spec)
+- [x] 6.3 me/export JSON; me/delete: cancel future, anonymize PII, keep legal rows (spec)
+- [x] 6.4 E2E: browse→login→book→QR; admin→book; cancel windows; 409
+- [x] 6.5 Full verify: scenario audit, README, suites green
