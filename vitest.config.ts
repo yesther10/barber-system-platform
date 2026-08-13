@@ -1,6 +1,12 @@
+import { fileURLToPath } from "node:url";
 import { defineConfig } from "vitest/config";
 
 export default defineConfig({
+  resolve: {
+    alias: {
+      "@": fileURLToPath(new URL("./apps/web", import.meta.url)),
+    },
+  },
   test: {
     env: {
       NODE_ENV: "test",
@@ -9,6 +15,9 @@ export default defineConfig({
       "packages/*/src/**/*.test.ts",
       "apps/worker/src/**/*.test.ts",
       "apps/web/lib/**/*.test.ts",
+      "apps/web/app/**/*.test.ts",
+      "apps/web/app/**/*.test.tsx",
+      "tests/unit/**/*.test.ts",
     ],
     environment: "node",
     coverage: {
