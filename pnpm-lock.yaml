@@ -102,6 +102,9 @@ importers:
       '@barber/payments':
         specifier: workspace:*
         version: link:../../packages/payments
+      dotenv:
+        specifier: ^17.4.2
+        version: 17.4.2
       resend:
         specifier: ^6.0.3
         version: 6.19.0

@@ -1,8 +1,13 @@
+import { config as loadEnv } from "dotenv";
+import { resolve } from "node:path";
 import { createClient, type PrismaClient } from "@barber/db";
 import { NotificationStatus, NotificationType } from "@barber/db";
 import { createMercadoPagoProvider, parseMercadoPagoCredentials, reconcilePayment, type PixProvider } from "@barber/payments";
 import { Resend } from "resend";
 import { buildNotificationEmail, computeRetryBackoff, DELIVERABLE_STATUSES, mapPaymentStatus, type EmailMessage } from "./notifications.js";
+
+loadEnv({ path: resolve(import.meta.dirname, "../../../.env") });
+loadEnv();
 
 function hasWithdrawnConsent(user: { consentWithdrawnAt: Date | null }) {
   return user.consentWithdrawnAt !== null;
