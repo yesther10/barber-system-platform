@@ -39,6 +39,22 @@ The system MUST require an authenticated client to create an appointment, MUST s
 - WHEN a client submits a booking
 - THEN the system rejects with 401 and creates no appointment
 
+### Requirement: Booking-to-Login Handoff
+
+When a booking action requires authentication, the client flow MUST send guests to `/login?next=<protected-target>` using only internal application paths. After successful sign-in, the user MUST return to the requested protected booking path or a safe default if the target is invalid.
+
+#### Scenario: Guest starts a protected booking action
+
+- GIVEN a guest tries to continue into a protected booking step
+- WHEN the application detects authentication is required
+- THEN the guest is sent to `/login` with an internal booking `next` path
+
+#### Scenario: Invalid booking redirect target
+
+- GIVEN a booking flow produces a non-internal redirect target
+- WHEN the guest is handed off to login
+- THEN the system uses a safe default path instead of that target
+
 ### Requirement: Slot Conflict Prevention
 
 The system MUST prevent overlapping appointments for the same barber. Slot validation MUST happen inside the booking transaction under a lock that serializes concurrent bookings for the same barber (application-level locking). Conflicting bookings MUST be rejected.

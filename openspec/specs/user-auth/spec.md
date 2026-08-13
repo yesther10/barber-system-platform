@@ -8,7 +8,7 @@ Authentication and authorization for all actors: clients, barbershop admins, and
 
 ### Requirement: Dual Authentication
 
-The system MUST support sign-in with email/password and with Google OAuth. New Google users MUST be provisioned automatically with the `client` role.
+The system MUST support sign-in with email/password and with Google OAuth. New Google users MUST be provisioned automatically with the `client` role. The `/login` page MUST always offer email/password sign-in and MUST show Google sign-in only when Google auth is available for the running environment.
 
 #### Scenario: Email/password sign-in
 
@@ -21,6 +21,12 @@ The system MUST support sign-in with email/password and with Google OAuth. New G
 - GIVEN a Google account not yet registered
 - WHEN the user signs in with Google
 - THEN an account with role `client` is created and the session starts
+
+#### Scenario: Google sign-in unavailable
+
+- GIVEN Google auth is not configured for the running environment
+- WHEN a guest opens `/login`
+- THEN the page shows email/password sign-in without a Google sign-in action
 
 ### Requirement: Role Enforcement
 
@@ -41,6 +47,28 @@ The booking creation endpoint MUST reject unauthenticated requests.
 - GIVEN no active session
 - WHEN a booking request is submitted
 - THEN the system returns 401
+
+### Requirement: Login Page Feedback and Redirect Safety
+
+The `/login` page MUST validate required credentials, MUST surface authentication failures clearly, MUST prevent authenticated users from staying on the guest login flow, and MUST honor post-login redirects only for internal `next` paths. External URLs, absolute URLs, or malformed redirect targets MUST be ignored in favor of a safe default destination.
+
+#### Scenario: Invalid credentials on login
+
+- GIVEN a guest on `/login`
+- WHEN the guest submits invalid email/password credentials
+- THEN the page stays on `/login` and shows a clear authentication error
+
+#### Scenario: Unsafe redirect target
+
+- GIVEN a guest opens `/login?next=https://evil.example`
+- WHEN the guest signs in successfully
+- THEN the system ignores that `next` value and redirects to the safe default page
+
+#### Scenario: Authenticated user reaches login
+
+- GIVEN an authenticated session already exists
+- WHEN the user navigates to `/login`
+- THEN the system redirects the user away from the guest login page
 
 ### Requirement: Barber Invitations
 
