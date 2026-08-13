@@ -12,6 +12,7 @@
   "dependencies": {
     "@barber/contracts": "workspace:*",
     "@barber/db": "workspace:^",
+    "@barber/payments": "workspace:*",
     "bcryptjs": "^3.0.3",
     "next": "^16.2.12",
     "next-auth": "5.0.0-beta.32",

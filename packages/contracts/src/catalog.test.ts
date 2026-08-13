@@ -1,12 +1,21 @@
 import { describe, expect, it } from "vitest";
 import {
   BarberInput,
+  BarberUpdate,
+  BarberView,
   BarbershopInput,
   BarbershopView,
+  CreateBarberInput,
+  CreateScheduleExceptionInput,
+  CreateScheduleInput,
   ScheduleExceptionInput,
+  ScheduleExceptionView,
   ScheduleInput,
+  ScheduleUpdate,
+  ScheduleView,
   ServiceInput,
   ServiceUpdate,
+  ServiceView,
 } from "./catalog.js";
 
 describe("catalog contracts", () => {
@@ -136,5 +145,83 @@ describe("catalog contracts", () => {
     });
     expect(parsed.success).toBe(true);
     if (parsed.success) expect(parsed.data.confirmationMode).toBe("manual");
+  });
+
+  it("parses a service view with id and timestamps", () => {
+    const parsed = ServiceView.safeParse({
+      id: "svc_1",
+      name: "Corte",
+      priceBRL: 45,
+      durationMinutes: 30,
+      active: true,
+      createdAt: "2026-08-01T10:00:00.000Z",
+      updatedAt: "2026-08-01T10:00:00.000Z",
+    });
+    expect(parsed.success).toBe(true);
+    if (parsed.success) expect(parsed.data.priceBRL).toBe(45);
+  });
+
+  it("parses create/update barber inputs and the barber view", () => {
+    const created = CreateBarberInput.safeParse({
+      userId: "usr_1",
+      specialties: ["corte"],
+      active: true,
+    });
+    expect(created.success).toBe(true);
+    if (created.success) expect(created.data.userId).toBe("usr_1");
+    expect(CreateBarberInput.safeParse({ specialties: ["corte"] }).success).toBe(false);
+
+    expect(BarberUpdate.safeParse({ active: false, bio: "Novo" }).success).toBe(true);
+    expect(
+      BarberView.safeParse({
+        id: "brb_1",
+        userId: "usr_1",
+        specialties: ["corte"],
+        active: true,
+        createdAt: "2026-08-01T10:00:00.000Z",
+        updatedAt: "2026-08-01T10:00:00.000Z",
+      }).success,
+    ).toBe(true);
+  });
+
+  it("parses schedule create/update and views; exception create and view", () => {
+    const created = CreateScheduleInput.safeParse({
+      barberId: "brb_1",
+      dayOfWeek: 3,
+      startTime: "09:00",
+      endTime: "17:00",
+    });
+    expect(created.success).toBe(true);
+    if (created.success) expect(created.data.barberId).toBe("brb_1");
+    expect(CreateScheduleInput.safeParse({ dayOfWeek: 3, startTime: "09:00", endTime: "17:00" }).success).toBe(
+      false,
+    );
+
+    expect(ScheduleUpdate.safeParse({ endTime: "18:00" }).success).toBe(true);
+    expect(
+      ScheduleView.safeParse({
+        id: "sch_1",
+        dayOfWeek: 3,
+        startTime: "09:00",
+        endTime: "17:00",
+      }).success,
+    ).toBe(true);
+
+    const exception = CreateScheduleExceptionInput.safeParse({
+      barberId: "brb_1",
+      date: "2026-08-15",
+      startTime: "09:00",
+      endTime: "17:00",
+    });
+    expect(exception.success).toBe(true);
+    if (exception.success) expect(exception.data.barberId).toBe("brb_1");
+    expect(
+      ScheduleExceptionView.safeParse({
+        id: "exc_1",
+        date: "2026-08-15",
+        startTime: "09:00",
+        endTime: "17:00",
+      }).success,
+    ).toBe(true);
   });
 });

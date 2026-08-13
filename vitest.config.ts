@@ -17,6 +17,7 @@ export default defineConfig({
       "apps/web/lib/**/*.test.ts",
       "apps/web/app/**/*.test.ts",
       "apps/web/app/**/*.test.tsx",
+      "tests/unit/**/*.test.ts",
     ],
     environment: "node",
     coverage: {
