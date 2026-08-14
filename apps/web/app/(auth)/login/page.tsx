@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import Link from "next/link";
 import { authConfig } from "@/lib/auth.config";
 import { auth } from "@/lib/auth";
 import { sanitizeNextPath } from "@/lib/auth-redirect";
@@ -35,6 +36,12 @@ export default async function LoginPage({
           </p>
         </div>
         <LoginForm nextPath={nextPath} googleEnabled={googleEnabled} />
+        <p className="pt-2 text-center text-sm text-slate-600">
+          Ainda não tem conta?{" "}
+          <Link href="/register" className="font-medium text-slate-900 underline underline-offset-2 hover:text-slate-700">
+            Criar conta
+          </Link>
+        </p>
       </div>
     </main>
   );
