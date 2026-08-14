@@ -22,7 +22,13 @@ export default defineConfig({
     environment: "node",
     coverage: {
       provider: "v8",
-      include: ["packages/*/src/**/*.ts", "apps/worker/src/**/*.ts"],
+      include: [
+        "packages/*/src/**/*.ts",
+        "apps/worker/src/**/*.ts",
+        "apps/web/app/**/*.ts",
+        "apps/web/app/**/*.tsx",
+        "apps/web/lib/**/*.ts",
+      ],
       exclude: ["**/*.test.ts", "**/dist/**", "**/node_modules/**"],
     },
   },

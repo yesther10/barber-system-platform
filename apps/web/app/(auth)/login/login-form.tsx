@@ -19,7 +19,7 @@ type SignInLike = typeof signIn;
 
 export async function submitCredentials(signInFn: SignInLike, payload: CredentialsPayload) {
   if (!payload.email.trim() || !payload.password.trim()) {
-    return { ok: false as const, error: "Informá e-mail e senha." };
+    return { ok: false as const, error: "Informe e-mail e senha." };
   }
 
   const result = await signInFn("credentials", {

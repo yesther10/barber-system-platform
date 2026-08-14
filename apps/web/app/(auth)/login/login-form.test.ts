@@ -7,7 +7,7 @@ describe("submitCredentials", () => {
 
     await expect(
       submitCredentials(signIn, { email: "", password: "", nextPath: "/booking" }),
-    ).resolves.toEqual({ ok: false, error: "Informá e-mail e senha." });
+    ).resolves.toEqual({ ok: false, error: "Informe e-mail e senha." });
     expect(signIn).not.toHaveBeenCalled();
   });
 
