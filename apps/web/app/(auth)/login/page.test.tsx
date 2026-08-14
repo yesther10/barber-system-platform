@@ -8,6 +8,13 @@ class RedirectError extends Error {
   }
 }
 
+function mockNextLink() {
+  vi.doMock("next/link", () => ({
+    default: ({ href, children }: { href: string; children: unknown }) =>
+      createElement("a", { href }, children as never),
+  }));
+}
+
 describe("login page", () => {
   afterEach(() => {
     vi.resetModules();
@@ -18,6 +25,7 @@ describe("login page", () => {
     vi.doMock("@/lib/auth", () => ({ auth: vi.fn().mockResolvedValue(null) }));
     vi.doMock("@/lib/auth.config", () => ({ authConfig: { providers: [] } }));
     vi.doMock("next/navigation", () => ({ redirect: vi.fn() }));
+    mockNextLink();
     vi.doMock("./login-form", () => ({
       default: ({ nextPath, googleEnabled }: { nextPath: string; googleEnabled: boolean }) =>
         createElement("mock-login-form", {
@@ -45,6 +53,7 @@ describe("login page", () => {
     }));
     vi.doMock("@/lib/auth.config", () => ({ authConfig: { providers: [{ id: "google" }] } }));
     vi.doMock("next/navigation", () => ({ redirect }));
+    mockNextLink();
     vi.doMock("./login-form", () => ({
       default: () => createElement("mock-login-form"),
     }));
@@ -61,6 +70,7 @@ describe("login page", () => {
     vi.doMock("@/lib/auth", () => ({ auth: vi.fn().mockResolvedValue(null) }));
     vi.doMock("@/lib/auth.config", () => ({ authConfig: { providers: [] } }));
     vi.doMock("next/navigation", () => ({ redirect: vi.fn() }));
+    mockNextLink();
     vi.doMock("./login-form", () => ({
       default: ({ googleEnabled }: { googleEnabled: boolean }) =>
         createElement("mock-login-form", {
@@ -72,5 +82,22 @@ describe("login page", () => {
     const html = renderToStaticMarkup(await LoginPage({ searchParams: Promise.resolve({}) }));
 
     expect(html).toContain('data-google-enabled="false"');
+  });
+
+  it("offers a create-account link to /register below the form", async () => {
+    vi.doMock("@/lib/auth", () => ({ auth: vi.fn().mockResolvedValue(null) }));
+    vi.doMock("@/lib/auth.config", () => ({ authConfig: { providers: [] } }));
+    vi.doMock("next/navigation", () => ({ redirect: vi.fn() }));
+    mockNextLink();
+    vi.doMock("./login-form", () => ({
+      default: () => createElement("mock-login-form"),
+    }));
+
+    const { default: LoginPage } = await import("./page");
+    const html = renderToStaticMarkup(await LoginPage({ searchParams: Promise.resolve({}) }));
+
+    expect(html).toContain('href="/register"');
+    expect(html).toContain("Criar conta");
+    expect(html.indexOf("mock-login-form")).toBeLessThan(html.indexOf('href="/register"'));
   });
 });
