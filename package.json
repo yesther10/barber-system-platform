@@ -16,6 +16,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
+    "pretest:integration": "pnpm --filter @barber/contracts build && pnpm --filter @barber/db db:generate && pnpm --filter @barber/db build && pnpm --filter @barber/payments build",
     "test:integration": "vitest run --config vitest.integration.config.ts",
     "test:e2e": "playwright test -c apps/web/playwright.config.ts",
     "verify:full": "pnpm test && pnpm test:integration && pnpm test:e2e && pnpm typecheck && pnpm lint && pnpm build",
