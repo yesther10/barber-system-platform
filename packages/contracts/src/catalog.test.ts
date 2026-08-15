@@ -8,6 +8,8 @@ import {
   CreateBarberInput,
   CreateScheduleExceptionInput,
   CreateScheduleInput,
+  PublicBarberQuery,
+  PublicBarberView,
   ScheduleExceptionInput,
   ScheduleExceptionView,
   ScheduleInput,
@@ -223,5 +225,48 @@ describe("catalog contracts", () => {
         endTime: "17:00",
       }).success,
     ).toBe(true);
+  });
+
+  it("parses a public barber query with slug and serviceId", () => {
+    const ok = PublicBarberQuery.safeParse({ barbershopSlug: "tesoura-de-ouro", serviceId: "svc_1" });
+    expect(ok.success).toBe(true);
+    if (ok.success) {
+      expect(ok.data.barbershopSlug).toBe("tesoura-de-ouro");
+      expect(ok.data.serviceId).toBe("svc_1");
+    }
+
+    expect(PublicBarberQuery.safeParse({ barbershopSlug: "", serviceId: "svc_1" }).success).toBe(false);
+    expect(PublicBarberQuery.safeParse({ barbershopSlug: "x", serviceId: "" }).success).toBe(false);
+    expect(PublicBarberQuery.safeParse({ barbershopSlug: "x" }).success).toBe(false);
+  });
+
+  it("parses a public barber view without userId", () => {
+    const ok = PublicBarberView.safeParse({
+      id: "brb_1",
+      specialties: ["corte", "barba"],
+      bio: "Especialista em degradê",
+      active: true,
+    });
+    expect(ok.success).toBe(true);
+    if (ok.success) {
+      expect(ok.data.id).toBe("brb_1");
+      expect(ok.data.specialties).toEqual(["corte", "barba"]);
+      expect(ok.data.active).toBe(true);
+    }
+
+    // bio is optional, but a leaked userId is never part of the public view
+    expect(PublicBarberView.safeParse({ id: "brb_1", specialties: ["corte"], active: false }).success).toBe(true);
+    const withUserId = PublicBarberView.safeParse({
+      id: "brb_1",
+      userId: "usr_1",
+      specialties: ["corte"],
+      active: true,
+    });
+    expect(withUserId.success).toBe(true);
+    if (withUserId.success) expect(withUserId.data).not.toHaveProperty("userId");
+
+    // non-string specialties or a missing id are rejected
+    expect(PublicBarberView.safeParse({ id: "brb_1", specialties: [123], active: true }).success).toBe(false);
+    expect(PublicBarberView.safeParse({ specialties: ["corte"], active: true }).success).toBe(false);
   });
 });
