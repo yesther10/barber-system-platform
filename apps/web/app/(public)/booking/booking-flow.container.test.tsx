@@ -11,6 +11,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { BookingFlow } from "./booking-flow";
+import { bookingPathFor } from "@/lib/booking-state";
 import type { BookingApiDeps } from "@/lib/booking-api";
 
 const { replace } = vi.hoisted(() => ({ replace: vi.fn() }));
@@ -36,6 +37,10 @@ function errorResponse(error: string) {
   return { ok: false, json: async () => ({ error }) } as Response;
 }
 
+function okJson(body: unknown) {
+  return { ok: true, json: async () => body } as Response;
+}
+
 const FUTURE = "2099-01-01";
 const NEXT_DAY = "2099-01-02";
 const PAST = "2020-01-01";
@@ -46,6 +51,25 @@ const selectionFor = (date?: string) => ({
   barberId: "brb_1",
   date,
 });
+
+const FULL_SELECTION = {
+  slug: "tesoura",
+  serviceId: "svc_1",
+  barberId: "brb_1",
+  date: FUTURE,
+  slot: "2099-01-01T12:00:00.000Z",
+};
+
+const serviceView = {
+  id: "svc_1",
+  name: "Corte",
+  description: "Tesoura e máquina",
+  priceBRL: 45,
+  durationMinutes: 30,
+  active: true,
+  createdAt: "2026-08-01T00:00:00.000Z",
+  updatedAt: "2026-08-01T00:00:00.000Z",
+};
 
 describe("booking flow container (mounted, injected fetch deps)", () => {
   afterEach(() => {
@@ -176,5 +200,81 @@ describe("booking flow container (mounted, injected fetch deps)", () => {
     });
 
     expect(await screen.findByText("barba")).toBeTruthy();
+  });
+
+  it("renders the confirm summary from catalog data fetched after a handoff", async () => {
+    const fetchFn = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(okJson([serviceView]))
+      .mockResolvedValueOnce(
+        okBarbersResponse([{ id: "brb_1", specialties: ["corte"], active: true }]),
+      );
+
+    render(<BookingFlow selection={FULL_SELECTION} deps={{ fetchFn }} />);
+
+    expect(await screen.findByText("Confirme seu agendamento")).toBeTruthy();
+    expect(await screen.findByText("Corte")).toBeTruthy();
+    expect(await screen.findByText("corte")).toBeTruthy();
+    expect(screen.getByText("01/01/2099")).toBeTruthy();
+    expect(screen.getByText("09:00")).toBeTruthy();
+    expect(screen.getByText("R$ 45")).toBeTruthy();
+    expect(fetchFn).toHaveBeenCalledTimes(2);
+  });
+
+  it("sends a guest to /login?next= preserving the full selection", async () => {
+    const fetchFn = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(okJson([serviceView]))
+      .mockResolvedValueOnce(
+        okBarbersResponse([{ id: "brb_1", specialties: ["corte"], active: true }]),
+      )
+      .mockResolvedValueOnce(errorResponse("SESSION_REQUIRED"));
+
+    render(<BookingFlow selection={FULL_SELECTION} deps={{ fetchFn }} />);
+
+    await screen.findByText("Confirme seu agendamento");
+    fireEvent.click(screen.getByRole("button", { name: "Confirmar agendamento" }));
+
+    await waitFor(() => expect(replace).toHaveBeenCalledTimes(1));
+    const loginPath = String(replace.mock.calls[0][0]);
+    expect(loginPath).toMatch(/^\/login\?next=/);
+    // The `next` carries the URL-encoded booking path (URLSearchParams form).
+    const next = decodeURIComponent(loginPath.split("next=")[1]);
+    expect(next).toBe(bookingPathFor(FULL_SELECTION));
+    expect(next).toContain("slug=tesoura");
+    expect(next).toContain("serviceId=svc_1");
+    expect(next).toContain("barberId=brb_1");
+    expect(next).toContain("date=2099-01-01");
+  });
+
+  it("returns the guest to the slot step with PT-BR copy on a slot conflict", async () => {
+    const fetchFn = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(okJson([serviceView]))
+      .mockResolvedValueOnce(
+        okBarbersResponse([{ id: "brb_1", specialties: ["corte"], active: true }]),
+      )
+      .mockResolvedValueOnce(errorResponse("SLOT_CONFLICT"))
+      .mockResolvedValueOnce(okGridResponse(["2099-01-01T15:00:00.000Z"]));
+
+    const { rerender } = render(<BookingFlow selection={FULL_SELECTION} deps={{ fetchFn }} />);
+    await screen.findByText("Confirme seu agendamento");
+    fireEvent.click(screen.getByRole("button", { name: "Confirmar agendamento" }));
+
+    await waitFor(() => expect(replace).toHaveBeenCalledTimes(1));
+    const cleared = decodeURIComponent(String(replace.mock.calls[0][0]));
+    expect(cleared).toContain("date=2099-01-01");
+    expect(cleared).not.toContain("slot=");
+
+    rerender(
+      <BookingFlow
+        selection={{ slug: "tesoura", serviceId: "svc_1", barberId: "brb_1", date: FUTURE }}
+        deps={{ fetchFn }}
+      />,
+    );
+    expect(
+      await screen.findByText("Este horário acabou de ser ocupado. Escolha outro horário."),
+    ).toBeTruthy();
+    expect(await screen.findByText("12:00")).toBeTruthy();
   });
 });

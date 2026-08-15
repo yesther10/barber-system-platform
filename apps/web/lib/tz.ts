@@ -62,3 +62,13 @@ export function todayInTz(now: Date = new Date(), timeZone: string = BR_TIMEZONE
   const p = zonedParts(now, timeZone);
   return `${p.year}-${pad(p.month)}-${pad(p.day)}`;
 }
+
+/**
+ * Renders a BR calendar date key (YYYY-MM-DD) as pt-BR day/month/year for the
+ * confirm step. Parsed as UTC noon so the calendar date is stable in any
+ * runtime timezone (BR is fixed UTC-3, no DST).
+ */
+export function formatDateKey(dateKey: string, timeZone: string = BR_TIMEZONE): string {
+  const p = zonedParts(new Date(`${dateKey}T12:00:00Z`), timeZone);
+  return `${pad(p.day)}/${pad(p.month)}/${p.year}`;
+}

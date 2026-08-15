@@ -3,6 +3,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import {
   BarbersStep,
   BookingFlow,
+  ConfirmStep,
   DateSlotStep,
   ServicesStep,
   barbersErrorForRender,
@@ -130,6 +131,50 @@ describe("presentational steps (PT-BR empty states)", () => {
     );
 
     expect(html).toContain("Nenhum horário disponível para esta data.");
+  });
+});
+
+describe("confirm step (PT-BR review summary)", () => {
+  const baseProps = {
+    serviceName: "Corte",
+    barberName: "corte, barba",
+    dateLabel: "20/08/2026",
+    timeLabel: "09:00",
+    priceLabel: "R$ 45",
+    onConfirm: () => undefined,
+    onBack: () => undefined,
+    submitting: false,
+  };
+
+  it("reviews the selected service, barber, date, time and price", () => {
+    const html = renderToStaticMarkup(<ConfirmStep {...baseProps} />);
+
+    expect(html).toContain("Serviço");
+    expect(html).toContain("Corte");
+    expect(html).toContain("Barbeiro");
+    expect(html).toContain("corte, barba");
+    expect(html).toContain("Data");
+    expect(html).toContain("20/08/2026");
+    expect(html).toContain("Horário");
+    expect(html).toContain("09:00");
+    expect(html).toContain("R$ 45");
+    expect(html).toContain("Confirmar agendamento");
+  });
+
+  it("disables the confirm action while submitting and shows the submitting label", () => {
+    const html = renderToStaticMarkup(<ConfirmStep {...baseProps} submitting />);
+
+    expect(html).toContain("Confirmando...");
+    expect(html).toContain("disabled");
+  });
+
+  it("shows the PT-BR error alert when a booking failure occurs", () => {
+    const html = renderToStaticMarkup(
+      <ConfirmStep {...baseProps} error="Este serviço não está mais disponível." />,
+    );
+
+    expect(html).toContain("Este serviço não está mais disponível.");
+    expect(html).toContain('role="alert"');
   });
 });
 
