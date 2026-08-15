@@ -39,6 +39,17 @@ const ptBR = {
       cta: "Confirmar agendamento",
       submitting: "Confirmando...",
     },
+    payment: {
+      instructions: "Escaneie o QR code ou copie o código Pix abaixo.",
+      qrAlt: "QR code Pix",
+      copyQr: "Copiar código Pix",
+      copied: "Código copiado!",
+      waiting: "Aguardando confirmação do pagamento...",
+      received: "Pagamento recebido!",
+      expired: "O pagamento expirou.",
+      timeout: "Ainda não identificamos o pagamento.",
+      retry: "Tentar novamente",
+    },
     errors: {
       tenantNotFound: "Barbearia não encontrada.",
       serviceNotFound: "Serviço não encontrado.",

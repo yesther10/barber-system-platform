@@ -13,6 +13,7 @@ import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-libra
 import { BookingFlow } from "./booking-flow";
 import { bookingPathFor } from "@/lib/booking-state";
 import type { BookingApiDeps } from "@/lib/booking-api";
+import type { PixPaymentView } from "@barber/contracts";
 
 const { replace } = vi.hoisted(() => ({ replace: vi.fn() }));
 
@@ -39,6 +40,10 @@ function errorResponse(error: string) {
 
 function okJson(body: unknown) {
   return { ok: true, json: async () => body } as Response;
+}
+
+function createdJson(body: unknown) {
+  return { ok: true, status: 201, json: async () => body } as Response;
 }
 
 const FUTURE = "2099-01-01";
@@ -70,6 +75,26 @@ const serviceView = {
   createdAt: "2026-08-01T00:00:00.000Z",
   updatedAt: "2026-08-01T00:00:00.000Z",
 };
+
+const pixView: PixPaymentView = {
+  id: "pix_1",
+  appointmentId: "appt_1",
+  status: "pending",
+  qrCode: "000201emv",
+  expiresAt: "2099-02-01T00:00:00.000Z",
+  providerPaymentId: "provider_1",
+};
+
+const pendingStatus = { appointmentId: "appt_1", paymentStatus: "pending", appointmentStatus: "pending" };
+
+/** fetchFn that serves the pix POST and then always reports the given status. */
+function waitingFetch(pix: typeof pixView, status: unknown) {
+  return vi.fn<typeof fetch>().mockImplementation(async (input) => {
+    const url = String(input);
+    if (url.includes("/pix")) return createdJson(pix);
+    return okJson(status);
+  });
+}
 
 describe("booking flow container (mounted, injected fetch deps)", () => {
   afterEach(() => {
@@ -276,5 +301,87 @@ describe("booking flow container (mounted, injected fetch deps)", () => {
       await screen.findByText("Este horário acabou de ser ocupado. Escolha outro horário."),
     ).toBeTruthy();
     expect(await screen.findByText("12:00")).toBeTruthy();
+  });
+
+  it("renders the pix QR image and 'Pagamento recebido' once the payment is paid", async () => {
+    const toDataURL = vi.fn().mockResolvedValue("data:image/png;base64,qr");
+    const fetchFn = waitingFetch(pixView, {
+      appointmentId: "appt_1",
+      paymentStatus: "paid",
+      appointmentStatus: "confirmed",
+    });
+
+    render(<BookingFlow selection={{ ...FULL_SELECTION, appointmentId: "appt_1" }} deps={{ fetchFn, toDataURL }} />);
+
+    const img = await screen.findByRole("img", { name: "QR code Pix" });
+    expect(img.getAttribute("src")).toBe("data:image/png;base64,qr");
+    expect(await screen.findByText("Pagamento recebido!")).toBeTruthy();
+  });
+
+  it("copies the pix payload to the clipboard", async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    const fetchFn = waitingFetch(pixView, pendingStatus);
+
+    render(
+      <BookingFlow
+        selection={{ ...FULL_SELECTION, appointmentId: "appt_1" }}
+        deps={{ fetchFn, writeText, sleep: vi.fn().mockResolvedValue(undefined) }}
+      />,
+    );
+
+    fireEvent.click(await screen.findByRole("button", { name: "Copiar código Pix" }));
+    await waitFor(() => expect(writeText).toHaveBeenCalledWith("000201emv"));
+    expect(await screen.findByText("Código copiado!")).toBeTruthy();
+  });
+
+  it("shows the copy fallback without an image when the qr payload is null", async () => {
+    const fetchFn = waitingFetch({ ...pixView, qrCode: null }, pendingStatus);
+
+    render(
+      <BookingFlow
+        selection={{ ...FULL_SELECTION, appointmentId: "appt_1" }}
+        deps={{ fetchFn, sleep: vi.fn().mockResolvedValue(undefined) }}
+      />,
+    );
+
+    expect(await screen.findByRole("button", { name: "Copiar código Pix" })).toBeTruthy();
+    expect(screen.queryByRole("img")).toBeNull();
+  });
+
+  it("stops polling after the attempt budget and offers a manual retry", async () => {
+    const sleep = vi.fn().mockResolvedValue(undefined);
+    const fetchFn = waitingFetch(pixView, pendingStatus);
+
+    render(
+      <BookingFlow
+        selection={{ ...FULL_SELECTION, appointmentId: "appt_1" }}
+        deps={{ fetchFn, sleep }}
+      />,
+    );
+
+    expect(await screen.findByText("Ainda não identificamos o pagamento.")).toBeTruthy();
+
+    const statusCalls = () =>
+      fetchFn.mock.calls.filter(([input]) => !String(input).includes("/pix")).length;
+    expect(statusCalls()).toBe(10);
+
+    fireEvent.click(screen.getByRole("button", { name: "Tentar novamente" }));
+    await waitFor(() => expect(statusCalls()).toBeGreaterThan(10));
+  });
+
+  it("shows a PT-BR error when pix generation fails", async () => {
+    const fetchFn = vi.fn<typeof fetch>().mockResolvedValue(errorResponse("PAYMENT_CONFIGURATION_ERROR"));
+
+    render(
+      <BookingFlow
+        selection={{ ...FULL_SELECTION, appointmentId: "appt_1" }}
+        deps={{ fetchFn }}
+      />,
+    );
+
+    expect(
+      await screen.findByText("Não foi possível gerar o Pix no momento. Tente novamente."),
+    ).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Tentar novamente" })).toBeTruthy();
   });
 });
