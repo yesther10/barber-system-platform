@@ -220,6 +220,31 @@ export function slotsErrorForRender(
   return date && error?.date === date ? error.message : undefined;
 }
 
+/**
+ * Barbers to render for the selected service (B-1 stale-list guard). Mirrors
+ * `slotsForRender`: the list is keyed by the serviceId it was fetched for, so
+ * a previous service's barbers can never be rendered — or clicked — while the
+ * new service is loading (browser-back → re-select, or URL edit).
+ */
+export function barbersForRender(
+  barbers: { serviceId: string; barbers: PublicBarberView[] } | null,
+  serviceId: string | undefined,
+): PublicBarberView[] | undefined {
+  return serviceId && barbers?.serviceId === serviceId ? barbers.barbers : undefined;
+}
+
+/**
+ * Error to render for the selected service (B-1 stale-error guard). Mirrors
+ * `slotsErrorForRender`: a previous service's error is hidden while the new
+ * service is loading.
+ */
+export function barbersErrorForRender(
+  error: { serviceId: string; message: string } | null,
+  serviceId: string | undefined,
+): string | undefined {
+  return serviceId && error?.serviceId === serviceId ? error.message : undefined;
+}
+
 const stepTitle: Record<BookingStep, string> = {
   services: translations.booking.stepServices,
   barbers: translations.booking.stepBarbers,
@@ -237,8 +262,10 @@ export function BookingFlow({ selection, deps }: BookingFlowProps) {
 
   const [services, setServices] = useState<ServiceView[] | null>(null);
   const [servicesError, setServicesError] = useState<string | null>(null);
-  const [barbers, setBarbers] = useState<PublicBarberView[] | null>(null);
-  const [barbersError, setBarbersError] = useState<string | null>(null);
+  /** Barbers plus the service they belong to — rendered only on a service match. */
+  const [barbers, setBarbers] = useState<{ serviceId: string; barbers: PublicBarberView[] } | null>(null);
+  /** Fetch error plus the service it belongs to — rendered only on a service match. */
+  const [barbersError, setBarbersError] = useState<{ serviceId: string; message: string } | null>(null);
   /** Slots plus the date they belong to — rendered only on a date match. */
   const [slots, setSlots] = useState<{ date: string; slots: string[] } | null>(null);
   /** Fetch error plus the date it belongs to — rendered only on a date match. */
@@ -271,11 +298,13 @@ export function BookingFlow({ selection, deps }: BookingFlowProps) {
     fetchPublicBarbers(depsRef, selection.slug, selection.serviceId).then((result) => {
       if (cancelled) return;
       if (result.ok) {
-        setBarbers(result.data);
+        // B-1: store the list with the service it belongs to so a previous
+        // service's barbers can never render (or be clicked) for this service.
+        setBarbers({ serviceId: selection.serviceId, barbers: result.data });
         setBarbersError(null);
       } else {
         setBarbers(null);
-        setBarbersError(result.message);
+        setBarbersError({ serviceId: selection.serviceId, message: result.message });
       }
     });
     return () => {
@@ -315,6 +344,8 @@ export function BookingFlow({ selection, deps }: BookingFlowProps) {
 
   const renderedSlots = slotsForRender(slots, selection.date);
   const renderedSlotsError = slotsErrorForRender(slotsError, selection.date);
+  const renderedBarbers = barbersForRender(barbers, selection.serviceId);
+  const renderedBarbersError = barbersErrorForRender(barbersError, selection.serviceId);
 
   return (
     <main className="mx-auto flex min-h-screen w-full max-w-md flex-col justify-center gap-6 px-6 py-12">
@@ -333,14 +364,14 @@ export function BookingFlow({ selection, deps }: BookingFlowProps) {
       ) : null}
 
       {step === "barbers" ? (
-        barbersError ? (
+        renderedBarbersError ? (
           <p role="alert" className="rounded-2xl bg-rose-50 px-4 py-3 text-sm text-rose-700">
-            {barbersError}
+            {renderedBarbersError}
           </p>
-        ) : barbers === null ? (
+        ) : renderedBarbers === undefined ? (
           <p className="text-sm text-slate-500">{translations.booking.loading}</p>
         ) : (
-          <BarbersStep barbers={barbers} onSelect={(barberId) => go({ type: "select-barber", barberId })} />
+          <BarbersStep barbers={renderedBarbers} onSelect={(barberId) => go({ type: "select-barber", barberId })} />
         )
       ) : null}
 

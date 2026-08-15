@@ -9,12 +9,14 @@
  * no-request guard, and the stale-grid reset on date change (C-1).
  */
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { act, cleanup, render, screen } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { BookingFlow } from "./booking-flow";
 import type { BookingApiDeps } from "@/lib/booking-api";
 
+const { replace } = vi.hoisted(() => ({ replace: vi.fn() }));
+
 vi.mock("next/navigation", () => ({
-  useRouter: () => ({ replace: vi.fn() }),
+  useRouter: () => ({ replace }),
 }));
 
 // Vitest runs without globals, so RTL's auto-cleanup never registers — do it
@@ -23,6 +25,11 @@ afterEach(() => cleanup());
 
 function okGridResponse(slots: string[]) {
   return { ok: true, json: async () => ({ slots }) } as Response;
+}
+
+/** The barbers route returns a bare PublicBarberView array. */
+function okBarbersResponse(barbers: Array<{ id: string; specialties: string[]; active: boolean }>) {
+  return { ok: true, json: async () => barbers } as Response;
 }
 
 function errorResponse(error: string) {
@@ -43,6 +50,7 @@ const selectionFor = (date?: string) => ({
 describe("booking flow container (mounted, injected fetch deps)", () => {
   afterEach(() => {
     vi.clearAllMocks();
+    replace.mockClear();
   });
 
   it("renders loading then the slot grid once slots resolve", async () => {
@@ -132,5 +140,41 @@ describe("booking flow container (mounted, injected fetch deps)", () => {
     });
 
     expect(await screen.findByText("12:00")).toBeTruthy();
+  });
+
+  it("clears the previous service's barbers while the new service is loading", async () => {
+    let resolveSecond: ((response: Response) => void) | undefined;
+    const fetchFn = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(
+        okBarbersResponse([{ id: "brb_a", specialties: ["corte"], active: true }]),
+      )
+      .mockImplementationOnce(
+        () =>
+          new Promise<Response>((resolve) => {
+            resolveSecond = resolve;
+          }),
+      );
+    const deps: BookingApiDeps = { fetchFn };
+
+    const { rerender } = render(
+      <BookingFlow selection={{ slug: "tesoura", serviceId: "svc_A" }} deps={deps} />,
+    );
+    expect(await screen.findByText("corte")).toBeTruthy();
+
+    // Re-select a different service: its fetch is now in flight.
+    rerender(<BookingFlow selection={{ slug: "tesoura", serviceId: "svc_B" }} deps={deps} />);
+
+    // The previous service's barbers must be gone, replaced by loading.
+    expect(screen.queryByText("corte")).toBeNull();
+    expect(screen.getByText("Carregando...")).toBeTruthy();
+    expect(fetchFn).toHaveBeenCalledTimes(2);
+    expect(String(fetchFn.mock.calls[1][0])).toContain("serviceId=svc_B");
+
+    await act(async () => {
+      resolveSecond?.(okBarbersResponse([{ id: "brb_b", specialties: ["barba"], active: true }]));
+    });
+
+    expect(await screen.findByText("barba")).toBeTruthy();
   });
 });

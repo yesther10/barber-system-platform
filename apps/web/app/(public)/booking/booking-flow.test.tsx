@@ -5,6 +5,8 @@ import {
   BookingFlow,
   DateSlotStep,
   ServicesStep,
+  barbersErrorForRender,
+  barbersForRender,
   slotsErrorForRender,
   slotsFetchParams,
   slotsForRender,
@@ -242,5 +244,43 @@ describe("slotsErrorForRender (stale-error guard)", () => {
 
   it("returns undefined when there is no error", () => {
     expect(slotsErrorForRender(null, "2026-08-20")).toBeUndefined();
+  });
+});
+
+describe("barbersForRender (B-1 stale-list guard)", () => {
+  const barber = { id: "brb_1", specialties: ["corte"], active: true };
+
+  it("renders barbers only when they belong to the selected service", () => {
+    expect(
+      barbersForRender({ serviceId: "svc_1", barbers: [barber] }, "svc_1"),
+    ).toEqual([barber]);
+  });
+
+  it("hides the previous service's barbers while the new service is loading", () => {
+    expect(
+      barbersForRender({ serviceId: "svc_1", barbers: [barber] }, "svc_2"),
+    ).toBeUndefined();
+  });
+
+  it("returns undefined while no barbers have loaded", () => {
+    expect(barbersForRender(null, "svc_1")).toBeUndefined();
+  });
+
+  it("returns undefined when no service is selected", () => {
+    expect(barbersForRender({ serviceId: "svc_1", barbers: [barber] }, undefined)).toBeUndefined();
+  });
+});
+
+describe("barbersErrorForRender (B-1 stale-error guard)", () => {
+  it("renders an error only when it belongs to the selected service", () => {
+    expect(barbersErrorForRender({ serviceId: "svc_1", message: "Erro" }, "svc_1")).toBe("Erro");
+  });
+
+  it("hides the previous service's error while the new service is loading", () => {
+    expect(barbersErrorForRender({ serviceId: "svc_1", message: "Erro" }, "svc_2")).toBeUndefined();
+  });
+
+  it("returns undefined when there is no error", () => {
+    expect(barbersErrorForRender(null, "svc_1")).toBeUndefined();
   });
 });
