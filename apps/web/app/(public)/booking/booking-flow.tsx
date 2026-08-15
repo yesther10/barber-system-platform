@@ -178,6 +178,48 @@ interface BookingFlowProps {
   deps?: BookingApiDeps;
 }
 
+/**
+ * Pure decision for the slots effect (booking design: DI). Returns the fetch
+ * params for the current selection or null when no request should be sent —
+ * off the date-slot step, on incomplete selections, or for past dates (the
+ * client-side no-request guard). Kept pure so the guard is unit-testable.
+ */
+export function slotsFetchParams(
+  step: BookingStep,
+  selection: BookingSelection,
+  today: string,
+): { slug: string; serviceId: string; barberId: string; date: string } | null {
+  if (step !== "date-slot") return null;
+  const { slug, serviceId, barberId, date } = selection;
+  if (!slug || !serviceId || !barberId || !date) return null;
+  if (date < today) return null; // past dates blocked client-side — no request
+  return { slug, serviceId, barberId, date };
+}
+
+/**
+ * Slots to render for the selected date (C-1 stale-grid guard). The grid is
+ * derived from the date the slots were fetched for, so a previous date's grid
+ * can never be rendered — or clicked — while the new date is loading.
+ */
+export function slotsForRender(
+  slots: { date: string; slots: string[] } | null,
+  date: string | undefined,
+): string[] | undefined {
+  return date && slots?.date === date ? slots.slots : undefined;
+}
+
+/**
+ * Error to render for the selected date (C-1 stale-error guard). Mirrors
+ * `slotsForRender`: a previous date's error is hidden while the new date is
+ * loading, so the step never shows a failure that belongs to another date.
+ */
+export function slotsErrorForRender(
+  error: { date: string; message: string } | null,
+  date: string | undefined,
+): string | undefined {
+  return date && error?.date === date ? error.message : undefined;
+}
+
 const stepTitle: Record<BookingStep, string> = {
   services: translations.booking.stepServices,
   barbers: translations.booking.stepBarbers,
@@ -197,8 +239,10 @@ export function BookingFlow({ selection, deps }: BookingFlowProps) {
   const [servicesError, setServicesError] = useState<string | null>(null);
   const [barbers, setBarbers] = useState<PublicBarberView[] | null>(null);
   const [barbersError, setBarbersError] = useState<string | null>(null);
-  const [slots, setSlots] = useState<string[] | null>(null);
-  const [slotsError, setSlotsError] = useState<string | null>(null);
+  /** Slots plus the date they belong to — rendered only on a date match. */
+  const [slots, setSlots] = useState<{ date: string; slots: string[] } | null>(null);
+  /** Fetch error plus the date it belongs to — rendered only on a date match. */
+  const [slotsError, setSlotsError] = useState<{ date: string; message: string } | null>(null);
 
   const go = (action: BookingAction) =>
     router.replace(bookingPathFor(bookingReducer(selection, action)));
@@ -240,18 +284,27 @@ export function BookingFlow({ selection, deps }: BookingFlowProps) {
   }, [step, selection.slug, selection.serviceId, depsRef]);
 
   useEffect(() => {
-    if (step !== "date-slot" || !selection.date || !selection.serviceId || !selection.barberId) return;
-    if (selection.date < today) return; // past dates blocked client-side
+    const params = slotsFetchParams(
+      step,
+      {
+        slug: selection.slug,
+        serviceId: selection.serviceId,
+        barberId: selection.barberId,
+        date: selection.date,
+      },
+      today,
+    );
+    if (!params) return; // off-step, incomplete selection, or past date — no request
     let cancelled = false;
-    fetchSlots(depsRef, selection.slug, selection.serviceId, selection.barberId, selection.date).then(
+    fetchSlots(depsRef, params.slug, params.serviceId, params.barberId, params.date).then(
       (result) => {
         if (cancelled) return;
         if (result.ok) {
-          setSlots(result.data.slots);
-          setSlotsError(null);
+          // C-1: store the grid with the date it belongs to so a previous
+          // date's slots can never render (or be clicked) for this date.
+          setSlots({ date: params.date, slots: result.data.slots });
         } else {
-          setSlots(null);
-          setSlotsError(result.message);
+          setSlotsError({ date: params.date, message: result.message });
         }
       },
     );
@@ -259,6 +312,9 @@ export function BookingFlow({ selection, deps }: BookingFlowProps) {
       cancelled = true;
     };
   }, [step, selection.slug, selection.serviceId, selection.barberId, selection.date, today, depsRef]);
+
+  const renderedSlots = slotsForRender(slots, selection.date);
+  const renderedSlotsError = slotsErrorForRender(slotsError, selection.date);
 
   return (
     <main className="mx-auto flex min-h-screen w-full max-w-md flex-col justify-center gap-6 px-6 py-12">
@@ -289,15 +345,15 @@ export function BookingFlow({ selection, deps }: BookingFlowProps) {
       ) : null}
 
       {step === "date-slot" ? (
-        slotsError ? (
+        renderedSlotsError ? (
           <p role="alert" className="rounded-2xl bg-rose-50 px-4 py-3 text-sm text-rose-700">
-            {slotsError}
+            {renderedSlotsError}
           </p>
         ) : (
           <DateSlotStep
             date={selection.date}
             today={today}
-            slots={slots ?? undefined}
+            slots={renderedSlots}
             selectedSlot={selection.slot}
             onSelectDate={(date) => go({ type: "select-date", date })}
             onSelectSlot={(slot) => go({ type: "select-slot", slot })}

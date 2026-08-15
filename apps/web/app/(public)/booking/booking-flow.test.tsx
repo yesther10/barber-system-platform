@@ -5,6 +5,9 @@ import {
   BookingFlow,
   DateSlotStep,
   ServicesStep,
+  slotsErrorForRender,
+  slotsFetchParams,
+  slotsForRender,
 } from "./booking-flow";
 
 vi.mock("next/navigation", () => ({
@@ -161,5 +164,83 @@ describe("booking flow container (URL-driven step progression)", () => {
     const html = renderToStaticMarkup(<BookingFlow selection={{ slug: "" }} />);
 
     expect(html).toContain("Escolha o serviço");
+  });
+});
+
+describe("slotsFetchParams (pure slots fetch decision)", () => {
+  it("returns fetch params for a complete future-date selection on the date-slot step", () => {
+    expect(
+      slotsFetchParams(
+        "date-slot",
+        { slug: "tesoura", serviceId: "svc_1", barberId: "brb_1", date: "2099-01-01" },
+        "2026-08-14",
+      ),
+    ).toEqual({ slug: "tesoura", serviceId: "svc_1", barberId: "brb_1", date: "2099-01-01" });
+  });
+
+  it("returns null for a past date so no slot request is made", () => {
+    expect(
+      slotsFetchParams(
+        "date-slot",
+        { slug: "tesoura", serviceId: "svc_1", barberId: "brb_1", date: "2020-01-01" },
+        "2026-08-14",
+      ),
+    ).toBeNull();
+  });
+
+  it("returns null off the date-slot step", () => {
+    expect(slotsFetchParams("services", { slug: "tesoura" }, "2026-08-14")).toBeNull();
+    expect(
+      slotsFetchParams("barbers", { slug: "tesoura", serviceId: "svc_1" }, "2026-08-14"),
+    ).toBeNull();
+  });
+
+  it("returns null when the selection is incomplete", () => {
+    expect(
+      slotsFetchParams("date-slot", { slug: "tesoura", serviceId: "svc_1" }, "2026-08-14"),
+    ).toBeNull();
+    expect(
+      slotsFetchParams(
+        "date-slot",
+        { slug: "", serviceId: "svc_1", barberId: "brb_1", date: "2099-01-01" },
+        "2026-08-14",
+      ),
+    ).toBeNull();
+  });
+});
+
+describe("slotsForRender (stale-grid guard)", () => {
+  it("renders slots only when they belong to the selected date", () => {
+    expect(
+      slotsForRender({ date: "2026-08-20", slots: ["2026-08-20T12:00:00.000Z"] }, "2026-08-20"),
+    ).toEqual(["2026-08-20T12:00:00.000Z"]);
+  });
+
+  it("hides the previous date's slots while the new date is loading", () => {
+    expect(
+      slotsForRender({ date: "2026-08-20", slots: ["2026-08-20T12:00:00.000Z"] }, "2026-08-21"),
+    ).toBeUndefined();
+  });
+
+  it("returns undefined while no slots have loaded", () => {
+    expect(slotsForRender(null, "2026-08-20")).toBeUndefined();
+  });
+
+  it("returns undefined when no date is selected", () => {
+    expect(slotsForRender({ date: "2026-08-20", slots: ["2026-08-20T12:00:00.000Z"] }, undefined)).toBeUndefined();
+  });
+});
+
+describe("slotsErrorForRender (stale-error guard)", () => {
+  it("renders an error only when it belongs to the selected date", () => {
+    expect(slotsErrorForRender({ date: "2026-08-20", message: "Erro" }, "2026-08-20")).toBe("Erro");
+  });
+
+  it("hides the previous date's error while the new date is loading", () => {
+    expect(slotsErrorForRender({ date: "2026-08-20", message: "Erro" }, "2026-08-21")).toBeUndefined();
+  });
+
+  it("returns undefined when there is no error", () => {
+    expect(slotsErrorForRender(null, "2026-08-20")).toBeUndefined();
   });
 });
