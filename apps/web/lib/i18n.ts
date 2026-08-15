@@ -35,6 +35,13 @@ const ptBR = {
       pastDate: "Escolha uma data futura.",
       invalidInput: "Dados inválidos.",
       network: "Não foi possível carregar os dados. Tente novamente.",
+      slotConflict: "Este horário acabou de ser ocupado. Escolha outro horário.",
+      serviceInactive: "Este serviço não está mais disponível.",
+      barberInactive: "Este barbeiro não está mais disponível.",
+      sessionRequired: "Entre na sua conta para confirmar o agendamento.",
+      paymentNotFound: "Não encontramos este pagamento.",
+      pixUnavailable: "Não foi possível gerar o Pix no momento. Tente novamente.",
+      providerUnavailable: "O provedor de pagamento está indisponível. Tente novamente.",
     },
   },
 } as const;
