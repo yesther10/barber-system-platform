@@ -7,7 +7,7 @@
  * the login `next` path for free (sanitizeNextPath keeps pathname+search).
  * All functions are pure so the reducer and codec are unit-testable.
  */
-export type BookingStep = "services" | "barbers" | "date-slot";
+export type BookingStep = "services" | "barbers" | "date-slot" | "confirm" | "waiting";
 
 export interface BookingSelection {
   slug: string;
@@ -17,19 +17,25 @@ export interface BookingSelection {
   date?: string;
   /** UTC ISO instant selected on the slot grid. */
   slot?: string;
+  /** Appointment id once the booking exists — drives the payment step. */
+  appointmentId?: string;
 }
 
 export type BookingAction =
   | { type: "select-service"; serviceId: string }
   | { type: "select-barber"; barberId: string }
   | { type: "select-date"; date: string }
-  | { type: "select-slot"; slot: string };
+  | { type: "select-slot"; slot: string }
+  | { type: "clear-slot" }
+  | { type: "booking-created"; appointmentId: string };
 
-/** Which step the selection is on: services → barbers → date/slot. */
+/** Which step the selection is on: services → barbers → date/slot → confirm → waiting. */
 export function bookingStepOf(selection: BookingSelection): BookingStep {
+  if (selection.appointmentId) return "waiting";
   if (!selection.serviceId) return "services";
   if (!selection.barberId) return "barbers";
-  return "date-slot";
+  if (!selection.date || !selection.slot) return "date-slot";
+  return "confirm";
 }
 
 /** Applies a selection action, clearing any downstream choices. */
@@ -46,6 +52,12 @@ export function bookingReducer(
       return { ...selection, date: action.date, slot: undefined };
     case "select-slot":
       return { ...selection, slot: action.slot };
+    case "clear-slot":
+      // SLOT_CONFLICT path: drop the contested slot but keep the date so the
+      // guest lands back on the slot step with the grid still visible.
+      return { ...selection, slot: undefined };
+    case "booking-created":
+      return { ...selection, appointmentId: action.appointmentId };
   }
 }
 
@@ -63,6 +75,7 @@ export function selectionFromParams(
     barberId: pickFirst(params.barberId) || undefined,
     date: pickFirst(params.date) || undefined,
     slot: pickFirst(params.slot) || undefined,
+    appointmentId: pickFirst(params.appointmentId) || undefined,
   };
 }
 
@@ -79,4 +92,14 @@ export function selectionToParams(selection: BookingSelection): URLSearchParams 
 export function bookingPathFor(selection: BookingSelection): string {
   const query = selectionToParams(selection).toString();
   return query ? `/booking?${query}` : "/booking";
+}
+
+/**
+ * Login gate handoff for a guest on the confirm step (booking spec: login gate).
+ * The `next` value carries the full selection so that after sign-in the guest
+ * returns to the same step — `sanitizeNextPath` on the login page keeps the
+ * pathname + search of this exact URL.
+ */
+export function bookingLoginPath(selection: BookingSelection): string {
+  return `/login?next=${encodeURIComponent(bookingPathFor(selection))}`;
 }
