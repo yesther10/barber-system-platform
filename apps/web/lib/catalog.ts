@@ -20,6 +20,7 @@ import {
 } from "@barber/contracts";
 import type {
   BarberView,
+  PublicBarberView,
   ScheduleExceptionView,
   ScheduleView,
   ServiceView,
@@ -114,6 +115,16 @@ export function toBarberView(barber: Barber): BarberView {
     active: barber.active,
     createdAt: barber.createdAt.toISOString(),
     updatedAt: barber.updatedAt.toISOString(),
+  };
+}
+
+/** Maps a Prisma barber row to the public catalog view (deliberately no userId). */
+export function toPublicBarberView(barber: Barber): PublicBarberView {
+  return {
+    id: barber.id,
+    specialties: barber.specialties as string[],
+    bio: barber.bio ?? undefined,
+    active: barber.active,
   };
 }
 
@@ -391,4 +402,30 @@ export async function getPublicServices(db: PrismaClient, slug: string): Promise
   const shop = await db.barbershop.findUnique({ where: { slug }, select: { id: true } });
   if (!shop) throw new TenantNotFoundError();
   return listServices(db, shop.id);
+}
+
+/**
+ * Public barber browse by service (catalog spec): only ACTIVE barbers of the
+ * tenant with a `BarberService` assignment for the requested service. Unknown
+ * slug → TENANT_NOT_FOUND; deactivated/unknown service → SERVICE_NOT_FOUND;
+ * empty serviceId → INVALID_INPUT (the route validates via the contract too).
+ */
+export async function getPublicBarbersByService(
+  db: PrismaClient,
+  slug: string,
+  serviceId: string,
+): Promise<PublicBarberView[]> {
+  if (!serviceId) throw new InvalidInputError("serviceId is required");
+  const shop = await db.barbershop.findUnique({ where: { slug }, select: { id: true } });
+  if (!shop) throw new TenantNotFoundError();
+  const service = await db.service.findFirst({
+    where: { id: serviceId, barbershopId: shop.id, active: true },
+    select: { id: true },
+  });
+  if (!service) throw new ServiceNotFoundError();
+  const rows = await db.barber.findMany({
+    where: { barbershopId: shop.id, active: true, services: { some: { serviceId } } },
+    orderBy: { createdAt: "asc" },
+  });
+  return rows.map(toPublicBarberView);
 }
