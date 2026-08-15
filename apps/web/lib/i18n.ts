@@ -18,6 +18,25 @@ const ptBR = {
   health: {
     ok: "Serviço operacional",
   },
+  booking: {
+    stepServices: "Escolha o serviço",
+    stepBarbers: "Escolha o barbeiro",
+    stepDateSlot: "Escolha o dia e horário",
+    loading: "Carregando...",
+    emptyServices: "Nenhum serviço disponível no momento.",
+    emptyBarbers: "Nenhum barbeiro disponível para este serviço.",
+    emptySlots: "Nenhum horário disponível para esta data.",
+    selectDate: "Selecione uma data",
+    back: "Voltar",
+    errors: {
+      tenantNotFound: "Barbearia não encontrada.",
+      serviceNotFound: "Serviço não encontrado.",
+      barberNotFound: "Barbeiro não encontrado.",
+      pastDate: "Escolha uma data futura.",
+      invalidInput: "Dados inválidos.",
+      network: "Não foi possível carregar os dados. Tente novamente.",
+    },
+  },
 } as const;
 
 export const translations = ptBR;
