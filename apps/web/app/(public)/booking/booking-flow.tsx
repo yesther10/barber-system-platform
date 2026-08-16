@@ -15,7 +15,8 @@
  */
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import type { PublicBarberView, ServiceView } from "@barber/contracts";
+import QRCode from "qrcode";
+import type { PixPaymentView, PublicBarberView, ServiceView } from "@barber/contracts";
 import { translations } from "@/lib/i18n";
 import {
   bookingLoginPath,
@@ -28,11 +29,15 @@ import {
 } from "@/lib/booking-state";
 import {
   createBooking,
+  createPixPayment,
+  fetchPaymentStatus,
   fetchPublicBarbers,
   fetchPublicServices,
   fetchSlots,
   type BookingApiDeps,
 } from "@/lib/booking-api";
+import { createStatusPoller, type PaymentPollResult } from "@/lib/payment-poll";
+import { qrDataUrl } from "@/lib/qr";
 import { BR_TIMEZONE, formatDateKey, formatSlotLocal, todayInTz } from "@/lib/tz";
 
 // --- presentational steps ---------------------------------------------------
@@ -253,7 +258,14 @@ export function ConfirmStep({
 interface BookingFlowProps {
   selection: BookingSelection;
   /** Injected fetch deps (unit tests pass mocks; prod defaults to fetch). */
-  deps?: BookingApiDeps;
+  deps?: BookingFlowDeps;
+}
+
+/** Fetch + UI deps for the flow: fetchFn, QR converter, clipboard, poll sleep. */
+export interface BookingFlowDeps extends BookingApiDeps {
+  toDataURL?: (text: string) => Promise<string>;
+  writeText?: (text: string) => Promise<void>;
+  sleep?: (ms: number) => Promise<void>;
 }
 
 /**
@@ -336,7 +348,17 @@ export function BookingFlow({ selection, deps }: BookingFlowProps) {
   const step = bookingStepOf(selection);
   const today = todayInTz();
   const depsRef = useMemo(
-    () => deps ?? { fetchFn: (input: RequestInfo | URL, init?: RequestInit) => fetch(input, init) },
+    () => ({
+      fetchFn:
+        deps?.fetchFn ?? ((input: RequestInfo | URL, init?: RequestInit) => fetch(input, init)),
+      toDataURL: deps?.toDataURL ?? ((text: string) => QRCode.toDataURL(text)),
+      writeText:
+        deps?.writeText ??
+        (async (text: string) => {
+          await navigator.clipboard?.writeText(text);
+        }),
+      sleep: deps?.sleep,
+    }),
     [deps],
   );
 
@@ -354,6 +376,16 @@ export function BookingFlow({ selection, deps }: BookingFlowProps) {
   const [slotNotice, setSlotNotice] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [confirmError, setConfirmError] = useState<string | null>(null);
+  /** Pix payment generated for the appointment on the waiting screen. */
+  const [pixView, setPixView] = useState<PixPaymentView | null>(null);
+  const [pixError, setPixError] = useState<string | null>(null);
+  /** Terminal (or timeout) outcome of the payment poll. */
+  const [paymentResult, setPaymentResult] = useState<PaymentPollResult | null>(null);
+  /** QR data URL keyed by payment id so a stale QR never shows for a new pix. */
+  const [qrSrc, setQrSrc] = useState<{ paymentId: string; src: string } | null>(null);
+  const [copied, setCopied] = useState(false);
+  /** Bumped to re-run the payment poll after a manual retry. */
+  const [retryKey, setRetryKey] = useState(0);
 
   const go = (action: BookingAction) =>
     router.replace(bookingPathFor(bookingReducer(selection, action)));
@@ -461,6 +493,72 @@ export function BookingFlow({ selection, deps }: BookingFlowProps) {
     };
   }, [step, selection.slug, selection.serviceId, services, servicesError, barbers, barbersError, depsRef]);
 
+  // Waiting-screen hydration: generate the pix payment once the appointment
+  // exists (also re-hydrates after a refresh or a manual retry).
+  useEffect(() => {
+    if (step !== "waiting" || !selection.appointmentId) return;
+    if (pixView || pixError) return;
+    let cancelled = false;
+    createPixPayment(depsRef, selection.appointmentId).then((result) => {
+      if (cancelled) return;
+      if (result.ok) {
+        setPixView(result.data);
+        setPixError(null);
+      } else {
+        setPixView(null);
+        setPixError(result.message);
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [step, selection.appointmentId, pixView, pixError, depsRef]);
+
+  // Render the QR image from the pix EMV payload (keyed by payment id so a
+  // stale image can never show for a regenerated pix).
+  useEffect(() => {
+    if (!pixView?.qrCode) return;
+    let cancelled = false;
+    qrDataUrl(pixView.qrCode, depsRef).then((src) => {
+      if (cancelled || !src) return;
+      setQrSrc({ paymentId: pixView.id, src });
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [pixView, depsRef]);
+
+  // Payment status poll: paid/expired terminal, backoff between attempts,
+  // timeout → the manual retry path. Fetch hiccups keep the poll alive.
+  useEffect(() => {
+    if (!pixView || paymentResult) return;
+    let cancelled = false;
+    const poller = createStatusPoller();
+    poller
+      .poll({
+        fetchStatus: async () => {
+          const result = await fetchPaymentStatus(
+            depsRef,
+            pixView.providerPaymentId ?? selection.appointmentId ?? "",
+          );
+          if (result.ok) return result.data;
+          return {
+            appointmentId: selection.appointmentId ?? "",
+            paymentStatus: "pending" as const,
+            appointmentStatus: "pending" as const,
+          };
+        },
+        sleep: depsRef.sleep,
+      })
+      .then((result) => {
+        if (cancelled) return;
+        setPaymentResult(result);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [pixView, paymentResult, retryKey, selection.appointmentId, depsRef]);
+
   async function handleConfirm() {
     if (!selection.serviceId || !selection.barberId || !selection.slot) return;
     setSubmitting(true);
@@ -491,6 +589,19 @@ export function BookingFlow({ selection, deps }: BookingFlowProps) {
     router.replace(bookingPathFor({ ...selection, appointmentId: result.data.id }));
   }
 
+  function retryPayment() {
+    setPaymentResult(null);
+    setPixError(null);
+    setCopied(false);
+    setRetryKey((key) => key + 1);
+  }
+
+  async function copyPix() {
+    if (!pixView?.qrCode) return;
+    await depsRef.writeText(pixView.qrCode);
+    setCopied(true);
+  }
+
   const renderedSlots = slotsForRender(slots, selection.date);
   const renderedSlotsError = slotsErrorForRender(slotsError, selection.date);
   const renderedBarbers = barbersForRender(barbers, selection.serviceId);
@@ -499,6 +610,7 @@ export function BookingFlow({ selection, deps }: BookingFlowProps) {
   const confirmService = services?.find((s) => s.id === selection.serviceId);
   const confirmBarbers = barbersForRender(barbers, selection.serviceId);
   const confirmBarber = confirmBarbers?.find((b) => b.id === selection.barberId);
+  const qrImageSrc = pixView && qrSrc?.paymentId === pixView.id ? qrSrc.src : null;
 
   return (
     <main className="mx-auto flex min-h-screen w-full max-w-md flex-col justify-center gap-6 px-6 py-12">
@@ -570,6 +682,68 @@ export function BookingFlow({ selection, deps }: BookingFlowProps) {
           onConfirm={() => void handleConfirm()}
           onBack={() => router.replace(bookingPathFor(bookingReducer(selection, { type: "clear-slot" })))}
         />
+      ) : null}
+
+      {step === "waiting" ? (
+        <div className="space-y-4">
+          {pixError ? (
+            <>
+              <p role="alert" className="rounded-2xl bg-rose-50 px-4 py-3 text-sm text-rose-700">
+                {pixError}
+              </p>
+              <button
+                type="button"
+                onClick={retryPayment}
+                className="w-full rounded-full border border-slate-300 px-5 py-3 text-sm font-medium text-slate-700 transition hover:border-slate-900 hover:text-slate-900"
+              >
+                {translations.booking.payment.retry}
+              </button>
+            </>
+          ) : pixView ? (
+            <>
+              <p className="text-sm text-slate-600">{translations.booking.payment.instructions}</p>
+              {qrImageSrc ? (
+                <img
+                  src={qrImageSrc}
+                  alt={translations.booking.payment.qrAlt}
+                  className="mx-auto h-48 w-48"
+                />
+              ) : null}
+              <button
+                type="button"
+                onClick={() => void copyPix()}
+                disabled={!pixView.qrCode || copied}
+                className="w-full rounded-full border border-slate-300 px-5 py-3 text-sm font-medium text-slate-700 transition hover:border-slate-900 hover:text-slate-900 disabled:cursor-not-allowed disabled:opacity-70"
+              >
+                {copied ? translations.booking.payment.copied : translations.booking.payment.copyQr}
+              </button>
+              {paymentResult?.status === "paid" ? (
+                <p role="status" className="rounded-2xl bg-emerald-50 px-4 py-3 text-center text-sm font-medium text-emerald-700">
+                  {translations.booking.payment.received}
+                </p>
+              ) : paymentResult?.status === "expired" ? (
+                <p role="status" className="rounded-2xl bg-amber-50 px-4 py-3 text-center text-sm font-medium text-amber-700">
+                  {translations.booking.payment.expired}
+                </p>
+              ) : paymentResult?.status === "timeout" ? (
+                <div className="space-y-2">
+                  <p className="text-center text-sm text-slate-600">{translations.booking.payment.timeout}</p>
+                  <button
+                    type="button"
+                    onClick={retryPayment}
+                    className="w-full rounded-full border border-slate-300 px-5 py-3 text-sm font-medium text-slate-700 transition hover:border-slate-900 hover:text-slate-900"
+                  >
+                    {translations.booking.payment.retry}
+                  </button>
+                </div>
+              ) : (
+                <p className="text-center text-sm text-slate-600">{translations.booking.payment.waiting}</p>
+              )}
+            </>
+          ) : (
+            <p className="text-sm text-slate-500">{translations.booking.loading}</p>
+          )}
+        </div>
       ) : null}
     </main>
   );
