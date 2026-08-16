@@ -1,6 +1,8 @@
 import type { PrismaClient } from "@barber/db";
-import { createMercadoPagoProvider, parseMercadoPagoCredentials, type PixProvider, type VerifyWebhookInput } from "@barber/payments";
+import { createMercadoPagoProvider, parseMercadoPagoCredentials, PaymentAppointmentNotFoundError, type PixProvider, type VerifyWebhookInput } from "@barber/payments";
 import { PaymentConfigurationError } from "@barber/payments";
+import type { PaymentStatusView } from "@barber/contracts";
+import { mapAppointmentStatusToContract, mapPaymentStatusToContract } from "./booking";
 
 function createFakePixProvider(): PixProvider {
   return {
@@ -81,4 +83,34 @@ export async function resolveWebhookProvider(
   }
 
   return null;
+}
+
+/**
+ * Session-gated payment status read (payments spec): resolves the caller's
+ * appointment by `providerPaymentId` first, then the raw appointment id, then
+ * the `pix_`-prefixed payment id form (stripped) — one ownership-scoped OR
+ * match, no prefix assumption. An id matching no appointment or an
+ * appointment of another client resolves to 404 with no ownership leak.
+ */
+export async function getPaymentStatusView(
+  db: PrismaClient,
+  clientId: string,
+  id: string,
+): Promise<PaymentStatusView> {
+  const appointment = await db.appointment.findFirst({
+    where: {
+      clientId,
+      OR: [
+        { providerPaymentId: id },
+        { id },
+        ...(id.startsWith("pix_") ? [{ id: id.slice("pix_".length) }] : []),
+      ],
+    },
+  });
+  if (!appointment) throw new PaymentAppointmentNotFoundError();
+  return {
+    appointmentId: appointment.id,
+    paymentStatus: mapPaymentStatusToContract(appointment.paymentStatus),
+    appointmentStatus: mapAppointmentStatusToContract(appointment.status),
+  };
 }
