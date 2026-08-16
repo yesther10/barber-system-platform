@@ -2,7 +2,7 @@ import type { PrismaClient } from "@barber/db";
 import { createMercadoPagoProvider, parseMercadoPagoCredentials, PaymentAppointmentNotFoundError, type PixProvider, type VerifyWebhookInput } from "@barber/payments";
 import { PaymentConfigurationError } from "@barber/payments";
 import type { PaymentStatusView } from "@barber/contracts";
-import { mapAppointmentStatusToContract, mapPaymentStatusToContract } from "./booking.js";
+import { mapAppointmentStatusToContract, mapPaymentStatusToContract } from "./booking";
 
 function createFakePixProvider(): PixProvider {
   return {
