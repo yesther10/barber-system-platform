@@ -16,7 +16,9 @@ import {
   deleteSchedule,
   deleteService,
   ExceptionNotFoundError,
+  getPublicBarbersByService,
   getPublicServices,
+  InvalidInputError,
   listBarbers,
   listExceptions,
   listSchedules,
@@ -445,6 +447,79 @@ describe("catalog admin CRUD", () => {
       await updateService(prisma, f.shop.id, f.service.id, { active: true });
       await updateBarber(prisma, f.shop.id, f.barber.id, { active: false });
       await expect(getSlotGrid(prisma, query, now)).rejects.toThrow(BarberNotFoundError);
+    });
+  });
+
+  describe("public barber browse (catalog spec)", () => {
+    /** A shop with a service, an assigned active barber and an unassigned barber. */
+    async function barberBrowseShop(tag: string) {
+      const f = await shopFixture(prisma, `pub-b-${tag}`);
+      const service = await createService(prisma, f.shop.id, {
+        name: "Corte",
+        priceBRL: 45,
+        durationMinutes: 30,
+      });
+      const barberUser2 = await prisma.user.create({
+        data: { email: `cat.barber.pub-b.${tag}.2@example.com`, name: "Ana", role: "BARBER", barbershopId: f.shop.id },
+      });
+      const assigned = await createBarber(prisma, f.shop.id, {
+        userId: f.barberUser.id,
+        specialties: ["corte", "barba"],
+        bio: "Especialista em degradê",
+      });
+      const unassigned = await createBarber(prisma, f.shop.id, {
+        userId: barberUser2.id,
+        specialties: ["barba"],
+      });
+      await assignServiceToBarber(prisma, f.shop.id, assigned.id, service.id);
+      return { ...f, service, assigned, unassigned };
+    }
+
+    it("lists only active barbers assigned to the service as PublicBarberView (no userId)", async () => {
+      const f = await barberBrowseShop("assigned");
+
+      // an inactive barber assigned to the same service must be hidden
+      const barberUser3 = await prisma.user.create({
+        data: { email: "cat.barber.pub-b.inactive@example.com", name: "Bia", role: "BARBER", barbershopId: f.shop.id },
+      });
+      const inactive = await createBarber(prisma, f.shop.id, { userId: barberUser3.id, specialties: ["corte"] });
+      await assignServiceToBarber(prisma, f.shop.id, inactive.id, f.service.id);
+      await updateBarber(prisma, f.shop.id, inactive.id, { active: false });
+
+      const barbers = await getPublicBarbersByService(prisma, f.shop.slug, f.service.id);
+
+      expect(barbers).toHaveLength(1);
+      expect(barbers[0]).toEqual({
+        id: f.assigned.id,
+        specialties: ["corte", "barba"],
+        bio: "Especialista em degradê",
+        active: true,
+      });
+      expect(barbers[0]).not.toHaveProperty("userId");
+    });
+
+    it("404s for an unknown tenant slug", async () => {
+      const f = await barberBrowseShop("noslug");
+      await expect(getPublicBarbersByService(prisma, "nao-existe", f.service.id)).rejects.toThrow(
+        TenantNotFoundError,
+      );
+    });
+
+    it("404s for a deactivated or unknown service", async () => {
+      const f = await barberBrowseShop("nosvc");
+      await updateService(prisma, f.shop.id, f.service.id, { active: false });
+      await expect(getPublicBarbersByService(prisma, f.shop.slug, f.service.id)).rejects.toThrow(
+        ServiceNotFoundError,
+      );
+
+      await expect(getPublicBarbersByService(prisma, f.shop.slug, "svc-desconhecida")).rejects.toThrow(
+        ServiceNotFoundError,
+      );
+    });
+
+    it("rejects an empty serviceId with INVALID_INPUT", async () => {
+      const f = await barberBrowseShop("nosvcid");
+      await expect(getPublicBarbersByService(prisma, f.shop.slug, "")).rejects.toThrow(InvalidInputError);
     });
   });
 

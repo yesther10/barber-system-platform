@@ -97,6 +97,27 @@ export const BarberView = BarberInput.extend({
 
 export type BarberView = z.infer<typeof BarberView>;
 
+/** Public barber browse query — resolves the tenant by slug (catalog spec). */
+export const PublicBarberQuery = z.object({
+  barbershopSlug: z.string().min(1),
+  serviceId: z.string().min(1),
+});
+
+export type PublicBarberQuery = z.infer<typeof PublicBarberQuery>;
+
+/**
+ * Public barber profile returned by the guest browse endpoint. Deliberately
+ * has NO `userId` — internal identity never leaves the API.
+ */
+export const PublicBarberView = z.object({
+  id: z.string().min(1),
+  specialties: z.array(z.string().min(1)),
+  bio: z.string().min(1).optional(),
+  active: z.boolean(),
+});
+
+export type PublicBarberView = z.infer<typeof PublicBarberView>;
+
 /** Weekly recurring availability. dayOfWeek: 1=Monday … 7=Sunday. */
 export const ScheduleInput = z.object({
   dayOfWeek: z.number().int().min(1).max(7),
