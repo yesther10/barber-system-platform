@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { BR_TIMEZONE, formatSlotLocal, todayInTz } from "./tz";
+import { BR_TIMEZONE, formatDateKey, formatSlotLocal, todayInTz } from "./tz";
 
 describe("tz slot formatting", () => {
   it("exposes the fixed America/Sao_Paulo timezone constant", () => {
@@ -30,5 +30,15 @@ describe("todayInTz", () => {
 
   it("shifts to the previous calendar day for early-morning UTC instants", () => {
     expect(todayInTz(new Date("2026-08-21T02:00:00.000Z"))).toBe("2026-08-20");
+  });
+});
+
+describe("formatDateKey", () => {
+  it("renders a YYYY-MM-DD date key as pt-BR day/month/year", () => {
+    expect(formatDateKey("2026-08-20")).toBe("20/08/2026");
+  });
+
+  it("zero-pads single-digit days and months", () => {
+    expect(formatDateKey("2026-01-05")).toBe("05/01/2026");
   });
 });

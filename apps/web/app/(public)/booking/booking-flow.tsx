@@ -18,6 +18,7 @@ import { useRouter } from "next/navigation";
 import type { PublicBarberView, ServiceView } from "@barber/contracts";
 import { translations } from "@/lib/i18n";
 import {
+  bookingLoginPath,
   bookingPathFor,
   bookingReducer,
   bookingStepOf,
@@ -26,12 +27,13 @@ import {
   type BookingStep,
 } from "@/lib/booking-state";
 import {
+  createBooking,
   fetchPublicBarbers,
   fetchPublicServices,
   fetchSlots,
   type BookingApiDeps,
 } from "@/lib/booking-api";
-import { BR_TIMEZONE, formatSlotLocal, todayInTz } from "@/lib/tz";
+import { BR_TIMEZONE, formatDateKey, formatSlotLocal, todayInTz } from "@/lib/tz";
 
 // --- presentational steps ---------------------------------------------------
 
@@ -172,6 +174,82 @@ export function DateSlotStep({
 
 // --- container ---------------------------------------------------------------
 
+interface ConfirmStepProps {
+  serviceName?: string;
+  barberName?: string;
+  dateLabel: string;
+  timeLabel: string;
+  priceLabel?: string;
+  error?: string | null;
+  submitting: boolean;
+  onConfirm: () => void;
+  onBack: () => void;
+}
+
+/** Confirm step: review service/barber/date/slot with PT-BR copy. */
+export function ConfirmStep({
+  serviceName,
+  barberName,
+  dateLabel,
+  timeLabel,
+  priceLabel,
+  error,
+  submitting,
+  onConfirm,
+  onBack,
+}: ConfirmStepProps) {
+  return (
+    <div className="space-y-4">
+      <dl className="space-y-2 rounded-2xl border border-slate-200 p-4 text-sm">
+        <div className="flex justify-between gap-4">
+          <dt className="text-slate-500">{translations.booking.confirm.service}</dt>
+          <dd className="text-right font-medium text-slate-900">{serviceName ?? "—"}</dd>
+        </div>
+        <div className="flex justify-between gap-4">
+          <dt className="text-slate-500">{translations.booking.confirm.barber}</dt>
+          <dd className="text-right font-medium text-slate-900">{barberName ?? "—"}</dd>
+        </div>
+        <div className="flex justify-between gap-4">
+          <dt className="text-slate-500">{translations.booking.confirm.date}</dt>
+          <dd className="text-right font-medium text-slate-900">{dateLabel}</dd>
+        </div>
+        <div className="flex justify-between gap-4">
+          <dt className="text-slate-500">{translations.booking.confirm.time}</dt>
+          <dd className="text-right font-medium text-slate-900">{timeLabel}</dd>
+        </div>
+        {priceLabel ? (
+          <div className="flex justify-between gap-4 border-t border-slate-100 pt-2">
+            <dt className="text-slate-500">{translations.booking.confirm.price}</dt>
+            <dd className="text-right font-medium text-slate-900">{priceLabel}</dd>
+          </div>
+        ) : null}
+      </dl>
+
+      {error ? (
+        <p role="alert" className="rounded-2xl bg-rose-50 px-4 py-3 text-sm text-rose-700">
+          {error}
+        </p>
+      ) : null}
+
+      <button
+        type="button"
+        onClick={onConfirm}
+        disabled={submitting}
+        className="w-full rounded-full bg-slate-900 px-5 py-3 text-sm font-medium text-white transition hover:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-70"
+      >
+        {submitting ? translations.booking.confirm.submitting : translations.booking.confirm.cta}
+      </button>
+      <button
+        type="button"
+        onClick={onBack}
+        className="w-full rounded-full border border-slate-300 px-5 py-3 text-sm font-medium text-slate-700 transition hover:border-slate-900 hover:text-slate-900"
+      >
+        {translations.booking.back}
+      </button>
+    </div>
+  );
+}
+
 interface BookingFlowProps {
   selection: BookingSelection;
   /** Injected fetch deps (unit tests pass mocks; prod defaults to fetch). */
@@ -220,10 +298,37 @@ export function slotsErrorForRender(
   return date && error?.date === date ? error.message : undefined;
 }
 
+/**
+ * Barbers to render for the selected service (B-1 stale-list guard). Mirrors
+ * `slotsForRender`: the list is keyed by the serviceId it was fetched for, so
+ * a previous service's barbers can never be rendered — or clicked — while the
+ * new service is loading (browser-back → re-select, or URL edit).
+ */
+export function barbersForRender(
+  barbers: { serviceId: string; barbers: PublicBarberView[] } | null,
+  serviceId: string | undefined,
+): PublicBarberView[] | undefined {
+  return serviceId && barbers?.serviceId === serviceId ? barbers.barbers : undefined;
+}
+
+/**
+ * Error to render for the selected service (B-1 stale-error guard). Mirrors
+ * `slotsErrorForRender`: a previous service's error is hidden while the new
+ * service is loading.
+ */
+export function barbersErrorForRender(
+  error: { serviceId: string; message: string } | null,
+  serviceId: string | undefined,
+): string | undefined {
+  return serviceId && error?.serviceId === serviceId ? error.message : undefined;
+}
+
 const stepTitle: Record<BookingStep, string> = {
   services: translations.booking.stepServices,
   barbers: translations.booking.stepBarbers,
   "date-slot": translations.booking.stepDateSlot,
+  confirm: translations.booking.stepConfirm,
+  waiting: translations.booking.stepPayment,
 };
 
 export function BookingFlow({ selection, deps }: BookingFlowProps) {
@@ -237,12 +342,18 @@ export function BookingFlow({ selection, deps }: BookingFlowProps) {
 
   const [services, setServices] = useState<ServiceView[] | null>(null);
   const [servicesError, setServicesError] = useState<string | null>(null);
-  const [barbers, setBarbers] = useState<PublicBarberView[] | null>(null);
-  const [barbersError, setBarbersError] = useState<string | null>(null);
+  /** Barbers plus the service they belong to — rendered only on a service match. */
+  const [barbers, setBarbers] = useState<{ serviceId: string; barbers: PublicBarberView[] } | null>(null);
+  /** Fetch error plus the service it belongs to — rendered only on a service match. */
+  const [barbersError, setBarbersError] = useState<{ serviceId: string; message: string } | null>(null);
   /** Slots plus the date they belong to — rendered only on a date match. */
   const [slots, setSlots] = useState<{ date: string; slots: string[] } | null>(null);
   /** Fetch error plus the date it belongs to — rendered only on a date match. */
   const [slotsError, setSlotsError] = useState<{ date: string; message: string } | null>(null);
+  /** PT-BR message from a rejected booking (SLOT_CONFLICT) shown on the slot step. */
+  const [slotNotice, setSlotNotice] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+  const [confirmError, setConfirmError] = useState<string | null>(null);
 
   const go = (action: BookingAction) =>
     router.replace(bookingPathFor(bookingReducer(selection, action)));
@@ -267,15 +378,18 @@ export function BookingFlow({ selection, deps }: BookingFlowProps) {
 
   useEffect(() => {
     if (step !== "barbers" || !selection.serviceId) return;
+    const serviceId = selection.serviceId;
     let cancelled = false;
-    fetchPublicBarbers(depsRef, selection.slug, selection.serviceId).then((result) => {
+    fetchPublicBarbers(depsRef, selection.slug, serviceId).then((result) => {
       if (cancelled) return;
       if (result.ok) {
-        setBarbers(result.data);
+        // B-1: store the list with the service it belongs to so a previous
+        // service's barbers can never render (or be clicked) for this service.
+        setBarbers({ serviceId, barbers: result.data });
         setBarbersError(null);
       } else {
         setBarbers(null);
-        setBarbersError(result.message);
+        setBarbersError({ serviceId, message: result.message });
       }
     });
     return () => {
@@ -313,8 +427,78 @@ export function BookingFlow({ selection, deps }: BookingFlowProps) {
     };
   }, [step, selection.slug, selection.serviceId, selection.barberId, selection.date, today, depsRef]);
 
+  // Confirm-step hydration: after a login handoff the page mounts fresh at the
+  // confirm step with no catalog data — fetch what the summary needs.
+  useEffect(() => {
+    if (step !== "confirm") return;
+    let cancelled = false;
+    if (services === null && !servicesError) {
+      fetchPublicServices(depsRef, selection.slug).then((result) => {
+        if (cancelled) return;
+        if (result.ok) {
+          setServices(result.data);
+          setServicesError(null);
+        } else {
+          setServices(null);
+          setServicesError(result.message);
+        }
+      });
+    }
+    if (barbers === null && !barbersError) {
+      fetchPublicBarbers(depsRef, selection.slug, selection.serviceId ?? "").then((result) => {
+        if (cancelled) return;
+        if (result.ok) {
+          setBarbers({ serviceId: selection.serviceId ?? "", barbers: result.data });
+          setBarbersError(null);
+        } else {
+          setBarbers(null);
+          setBarbersError({ serviceId: selection.serviceId ?? "", message: result.message });
+        }
+      });
+    }
+    return () => {
+      cancelled = true;
+    };
+  }, [step, selection.slug, selection.serviceId, services, servicesError, barbers, barbersError, depsRef]);
+
+  async function handleConfirm() {
+    if (!selection.serviceId || !selection.barberId || !selection.slot) return;
+    setSubmitting(true);
+    setConfirmError(null);
+    setSlotNotice(null);
+    const result = await createBooking(depsRef, {
+      serviceId: selection.serviceId,
+      barberId: selection.barberId,
+      startsAt: selection.slot,
+    });
+    if (!result.ok) {
+      setSubmitting(false);
+      if (result.code === "SESSION_REQUIRED") {
+        // Login gate handoff: the `next` carries the full selection.
+        router.replace(bookingLoginPath(selection));
+        return;
+      }
+      if (result.step === "date-slot") {
+        // SLOT_CONFLICT / PAST_DATE — back to the slot step with the message.
+        setSlotNotice(result.message);
+        router.replace(bookingPathFor(bookingReducer(selection, { type: "clear-slot" })));
+        return;
+      }
+      setConfirmError(result.message);
+      return;
+    }
+    // Booking created — the waiting screen takes over via the appointment id.
+    router.replace(bookingPathFor({ ...selection, appointmentId: result.data.id }));
+  }
+
   const renderedSlots = slotsForRender(slots, selection.date);
   const renderedSlotsError = slotsErrorForRender(slotsError, selection.date);
+  const renderedBarbers = barbersForRender(barbers, selection.serviceId);
+  const renderedBarbersError = barbersErrorForRender(barbersError, selection.serviceId);
+
+  const confirmService = services?.find((s) => s.id === selection.serviceId);
+  const confirmBarbers = barbersForRender(barbers, selection.serviceId);
+  const confirmBarber = confirmBarbers?.find((b) => b.id === selection.barberId);
 
   return (
     <main className="mx-auto flex min-h-screen w-full max-w-md flex-col justify-center gap-6 px-6 py-12">
@@ -333,32 +517,59 @@ export function BookingFlow({ selection, deps }: BookingFlowProps) {
       ) : null}
 
       {step === "barbers" ? (
-        barbersError ? (
+        renderedBarbersError ? (
           <p role="alert" className="rounded-2xl bg-rose-50 px-4 py-3 text-sm text-rose-700">
-            {barbersError}
+            {renderedBarbersError}
           </p>
-        ) : barbers === null ? (
+        ) : renderedBarbers === undefined ? (
           <p className="text-sm text-slate-500">{translations.booking.loading}</p>
         ) : (
-          <BarbersStep barbers={barbers} onSelect={(barberId) => go({ type: "select-barber", barberId })} />
+          <BarbersStep barbers={renderedBarbers} onSelect={(barberId) => go({ type: "select-barber", barberId })} />
         )
       ) : null}
 
       {step === "date-slot" ? (
-        renderedSlotsError ? (
-          <p role="alert" className="rounded-2xl bg-rose-50 px-4 py-3 text-sm text-rose-700">
-            {renderedSlotsError}
-          </p>
-        ) : (
-          <DateSlotStep
-            date={selection.date}
-            today={today}
-            slots={renderedSlots}
-            selectedSlot={selection.slot}
-            onSelectDate={(date) => go({ type: "select-date", date })}
-            onSelectSlot={(slot) => go({ type: "select-slot", slot })}
-          />
-        )
+        <>
+          {slotNotice ? (
+            <p role="alert" className="rounded-2xl bg-rose-50 px-4 py-3 text-sm text-rose-700">
+              {slotNotice}
+            </p>
+          ) : null}
+          {renderedSlotsError ? (
+            <p role="alert" className="rounded-2xl bg-rose-50 px-4 py-3 text-sm text-rose-700">
+              {renderedSlotsError}
+            </p>
+          ) : (
+            <DateSlotStep
+              date={selection.date}
+              today={today}
+              slots={renderedSlots}
+              selectedSlot={selection.slot}
+              onSelectDate={(date) => {
+                setSlotNotice(null);
+                go({ type: "select-date", date });
+              }}
+              onSelectSlot={(slot) => {
+                setSlotNotice(null);
+                go({ type: "select-slot", slot });
+              }}
+            />
+          )}
+        </>
+      ) : null}
+
+      {step === "confirm" ? (
+        <ConfirmStep
+          serviceName={confirmService?.name}
+          barberName={confirmBarber?.specialties.join(", ")}
+          dateLabel={selection.date ? formatDateKey(selection.date) : ""}
+          timeLabel={selection.slot ? formatSlotLocal(selection.slot, BR_TIMEZONE) : ""}
+          priceLabel={confirmService ? `R$ ${confirmService.priceBRL}` : undefined}
+          error={confirmError}
+          submitting={submitting}
+          onConfirm={() => void handleConfirm()}
+          onBack={() => router.replace(bookingPathFor(bookingReducer(selection, { type: "clear-slot" })))}
+        />
       ) : null}
     </main>
   );

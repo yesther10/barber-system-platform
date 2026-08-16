@@ -3,8 +3,11 @@ import { renderToStaticMarkup } from "react-dom/server";
 import {
   BarbersStep,
   BookingFlow,
+  ConfirmStep,
   DateSlotStep,
   ServicesStep,
+  barbersErrorForRender,
+  barbersForRender,
   slotsErrorForRender,
   slotsFetchParams,
   slotsForRender,
@@ -131,6 +134,50 @@ describe("presentational steps (PT-BR empty states)", () => {
   });
 });
 
+describe("confirm step (PT-BR review summary)", () => {
+  const baseProps = {
+    serviceName: "Corte",
+    barberName: "corte, barba",
+    dateLabel: "20/08/2026",
+    timeLabel: "09:00",
+    priceLabel: "R$ 45",
+    onConfirm: () => undefined,
+    onBack: () => undefined,
+    submitting: false,
+  };
+
+  it("reviews the selected service, barber, date, time and price", () => {
+    const html = renderToStaticMarkup(<ConfirmStep {...baseProps} />);
+
+    expect(html).toContain("Serviço");
+    expect(html).toContain("Corte");
+    expect(html).toContain("Barbeiro");
+    expect(html).toContain("corte, barba");
+    expect(html).toContain("Data");
+    expect(html).toContain("20/08/2026");
+    expect(html).toContain("Horário");
+    expect(html).toContain("09:00");
+    expect(html).toContain("R$ 45");
+    expect(html).toContain("Confirmar agendamento");
+  });
+
+  it("disables the confirm action while submitting and shows the submitting label", () => {
+    const html = renderToStaticMarkup(<ConfirmStep {...baseProps} submitting />);
+
+    expect(html).toContain("Confirmando...");
+    expect(html).toContain("disabled");
+  });
+
+  it("shows the PT-BR error alert when a booking failure occurs", () => {
+    const html = renderToStaticMarkup(
+      <ConfirmStep {...baseProps} error="Este serviço não está mais disponível." />,
+    );
+
+    expect(html).toContain("Este serviço não está mais disponível.");
+    expect(html).toContain('role="alert"');
+  });
+});
+
 describe("booking flow container (URL-driven step progression)", () => {
   afterEach(() => {
     vi.clearAllMocks();
@@ -242,5 +289,43 @@ describe("slotsErrorForRender (stale-error guard)", () => {
 
   it("returns undefined when there is no error", () => {
     expect(slotsErrorForRender(null, "2026-08-20")).toBeUndefined();
+  });
+});
+
+describe("barbersForRender (B-1 stale-list guard)", () => {
+  const barber = { id: "brb_1", specialties: ["corte"], active: true };
+
+  it("renders barbers only when they belong to the selected service", () => {
+    expect(
+      barbersForRender({ serviceId: "svc_1", barbers: [barber] }, "svc_1"),
+    ).toEqual([barber]);
+  });
+
+  it("hides the previous service's barbers while the new service is loading", () => {
+    expect(
+      barbersForRender({ serviceId: "svc_1", barbers: [barber] }, "svc_2"),
+    ).toBeUndefined();
+  });
+
+  it("returns undefined while no barbers have loaded", () => {
+    expect(barbersForRender(null, "svc_1")).toBeUndefined();
+  });
+
+  it("returns undefined when no service is selected", () => {
+    expect(barbersForRender({ serviceId: "svc_1", barbers: [barber] }, undefined)).toBeUndefined();
+  });
+});
+
+describe("barbersErrorForRender (B-1 stale-error guard)", () => {
+  it("renders an error only when it belongs to the selected service", () => {
+    expect(barbersErrorForRender({ serviceId: "svc_1", message: "Erro" }, "svc_1")).toBe("Erro");
+  });
+
+  it("hides the previous service's error while the new service is loading", () => {
+    expect(barbersErrorForRender({ serviceId: "svc_1", message: "Erro" }, "svc_2")).toBeUndefined();
+  });
+
+  it("returns undefined when there is no error", () => {
+    expect(barbersErrorForRender(null, "svc_1")).toBeUndefined();
   });
 });

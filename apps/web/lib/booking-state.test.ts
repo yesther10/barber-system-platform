@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
+import { sanitizeNextPath } from "./auth-redirect";
 import {
+  bookingLoginPath,
+  bookingPathFor,
   bookingReducer,
   bookingStepOf,
   selectionFromParams,
@@ -21,6 +24,37 @@ describe("bookingStepOf", () => {
     expect(
       bookingStepOf({ slug: "tesoura", serviceId: "svc_1", barberId: "brb_1" }),
     ).toBe("date-slot");
+  });
+
+  it("stays at date-slot when a date is picked but no slot yet", () => {
+    expect(
+      bookingStepOf({ slug: "tesoura", serviceId: "svc_1", barberId: "brb_1", date: "2026-08-20" }),
+    ).toBe("date-slot");
+  });
+
+  it("moves to confirm once a slot is selected", () => {
+    expect(
+      bookingStepOf({
+        slug: "tesoura",
+        serviceId: "svc_1",
+        barberId: "brb_1",
+        date: "2026-08-20",
+        slot: "2026-08-20T12:00:00.000Z",
+      }),
+    ).toBe("confirm");
+  });
+
+  it("reaches waiting once a booking appointment id is set", () => {
+    expect(
+      bookingStepOf({
+        slug: "tesoura",
+        serviceId: "svc_1",
+        barberId: "brb_1",
+        date: "2026-08-20",
+        slot: "2026-08-20T12:00:00.000Z",
+        appointmentId: "appt_1",
+      }),
+    ).toBe("waiting");
   });
 });
 
@@ -73,6 +107,35 @@ describe("bookingReducer step order", () => {
     const state = apply([{ type: "select-slot", slot: "2026-08-20T12:00:00.000Z" }]);
     expect(state.slug).toBe("tesoura");
   });
+
+  it("clear-slot drops only the slot, keeping the date for the slot step", () => {
+    const state = apply([
+      { type: "select-service", serviceId: "svc_1" },
+      { type: "select-barber", barberId: "brb_1" },
+      { type: "select-date", date: "2026-08-20" },
+      { type: "select-slot", slot: "2026-08-20T12:00:00.000Z" },
+      { type: "clear-slot" },
+    ]);
+    expect(state).toEqual({ slug: "tesoura", serviceId: "svc_1", barberId: "brb_1", date: "2026-08-20" });
+  });
+
+  it("booking-created records the appointment id and keeps the full selection", () => {
+    const state = apply([
+      { type: "select-service", serviceId: "svc_1" },
+      { type: "select-barber", barberId: "brb_1" },
+      { type: "select-date", date: "2026-08-20" },
+      { type: "select-slot", slot: "2026-08-20T12:00:00.000Z" },
+      { type: "booking-created", appointmentId: "appt_1" },
+    ]);
+    expect(state).toEqual({
+      slug: "tesoura",
+      serviceId: "svc_1",
+      barberId: "brb_1",
+      date: "2026-08-20",
+      slot: "2026-08-20T12:00:00.000Z",
+      appointmentId: "appt_1",
+    });
+  });
 });
 
 describe("search-param codec", () => {
@@ -108,5 +171,30 @@ describe("search-param codec", () => {
 
   it("produces an empty selection when no params are present", () => {
     expect(selectionFromParams({})).toEqual({ slug: "" });
+  });
+
+  it("round-trips the appointment id through search params", () => {
+    const params = selectionToParams({ ...full, appointmentId: "appt_1" });
+    expect(selectionFromParams(Object.fromEntries(params))).toEqual({ ...full, appointmentId: "appt_1" });
+  });
+});
+
+describe("bookingLoginPath (login gate handoff)", () => {
+  const full: BookingSelection = {
+    slug: "tesoura",
+    serviceId: "svc_1",
+    barberId: "brb_1",
+    date: "2026-08-20",
+    slot: "2026-08-20T12:00:00.000Z",
+  };
+
+  it("builds /login?next= with the full selection URL", () => {
+    const path = bookingLoginPath(full);
+    expect(path).toBe(`/login?next=${encodeURIComponent(bookingPathFor(full))}`);
+  });
+
+  it("survives the login page sanitizeNextPath round-trip (pathname + search preserved)", () => {
+    const next = new URL(bookingLoginPath(full), "https://barberia.local").searchParams.get("next");
+    expect(sanitizeNextPath(next)).toBe(bookingPathFor(full));
   });
 });
