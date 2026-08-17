@@ -59,19 +59,3 @@ export type InviteInput = z.infer<typeof InviteInput>;
 export const InviteToken = z.string().min(20);
 
 export type InviteToken = z.infer<typeof InviteToken>;
-
-/**
- * Invite acceptance payload. Like registration, explicit LGPD consent is
- * mandatory — a barber who accepts an invite is signing up for an account,
- * so the same consent gate applies (user-auth spec).
- */
-export const InviteAcceptInput = z.object({
-  token: InviteToken,
-  name: z.string().min(1),
-  password: z.string().min(8),
-  phone: z.string().min(8).optional(),
-  consent: z.literal(true),
-  consentPolicyVersion: z.string().min(1),
-});
-
-export type InviteAcceptInput = z.infer<typeof InviteAcceptInput>;

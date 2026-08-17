@@ -1,6 +1,5 @@
 import { describe, expect, it } from "vitest";
 import {
-  InviteAcceptInput,
   InviteInput,
   InviteToken,
   LoginInput,
@@ -101,29 +100,5 @@ describe("auth contracts", () => {
     expect(InviteInput.safeParse({ email: "nope" }).success).toBe(false);
     expect(InviteToken.safeParse("a".repeat(24)).success).toBe(true);
     expect(InviteToken.safeParse("too-short").success).toBe(false);
-  });
-
-  it("parses an invite acceptance with explicit consent", () => {
-    const parsed = InviteAcceptInput.safeParse({
-      token: "a".repeat(64),
-      name: "Carlos Ferreira",
-      password: "s3nh4-segura",
-      consent: true,
-      consentPolicyVersion: "2026-07-31",
-    });
-    expect(parsed.success).toBe(true);
-    if (parsed.success) expect(parsed.data.token).toHaveLength(64);
-  });
-
-  it("rejects an invite acceptance without consent", () => {
-    expect(
-      InviteAcceptInput.safeParse({
-        token: "a".repeat(64),
-        name: "Carlos",
-        password: "s3nh4-segura",
-        consent: false,
-        consentPolicyVersion: "2026-07-31",
-      }).success,
-    ).toBe(false);
   });
 });

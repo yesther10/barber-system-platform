@@ -46,10 +46,7 @@ jobs:
           node-version: 22
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - run: pnpm --filter @barber/contracts build
       - run: pnpm --filter @barber/db db:generate
-      - run: pnpm --filter @barber/db build
-      - run: pnpm --filter @barber/payments build
       - run: pnpm test:integration
 
   e2e:
@@ -68,7 +65,5 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm --filter @barber/contracts build
       - run: pnpm --filter @barber/db db:generate
-      - run: pnpm --filter @barber/db build
-      - run: pnpm --filter @barber/payments build
       - run: npx playwright install --with-deps chromium
       - run: pnpm test:e2e
