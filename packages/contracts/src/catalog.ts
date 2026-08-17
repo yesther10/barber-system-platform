@@ -58,6 +58,15 @@ export const ServiceUpdate = ServiceInput.partial();
 
 export type ServiceUpdate = z.infer<typeof ServiceUpdate>;
 
+/** Full service as returned to admins and the public catalog. */
+export const ServiceView = ServiceInput.extend({
+  id: z.string().min(1),
+  createdAt: z.string().datetime(),
+  updatedAt: z.string().datetime(),
+});
+
+export type ServiceView = z.infer<typeof ServiceView>;
+
 /** Barber profile — specialties power the service assignment lists. */
 export const BarberInput = z.object({
   specialties: z.array(z.string().min(1)).min(1),
@@ -66,6 +75,48 @@ export const BarberInput = z.object({
 });
 
 export type BarberInput = z.infer<typeof BarberInput>;
+
+/** Links a barber profile to the invited barber user (must belong to the tenant). */
+export const CreateBarberInput = BarberInput.extend({
+  userId: z.string().min(1),
+});
+
+export type CreateBarberInput = z.infer<typeof CreateBarberInput>;
+
+export const BarberUpdate = BarberInput.partial();
+
+export type BarberUpdate = z.infer<typeof BarberUpdate>;
+
+/** Full barber profile as returned to admins. */
+export const BarberView = BarberInput.extend({
+  id: z.string().min(1),
+  userId: z.string().min(1),
+  createdAt: z.string().datetime(),
+  updatedAt: z.string().datetime(),
+});
+
+export type BarberView = z.infer<typeof BarberView>;
+
+/** Public barber browse query — resolves the tenant by slug (catalog spec). */
+export const PublicBarberQuery = z.object({
+  barbershopSlug: z.string().min(1),
+  serviceId: z.string().min(1),
+});
+
+export type PublicBarberQuery = z.infer<typeof PublicBarberQuery>;
+
+/**
+ * Public barber profile returned by the guest browse endpoint. Deliberately
+ * has NO `userId` — internal identity never leaves the API.
+ */
+export const PublicBarberView = z.object({
+  id: z.string().min(1),
+  specialties: z.array(z.string().min(1)),
+  bio: z.string().min(1).optional(),
+  active: z.boolean(),
+});
+
+export type PublicBarberView = z.infer<typeof PublicBarberView>;
 
 /** Weekly recurring availability. dayOfWeek: 1=Monday … 7=Sunday. */
 export const ScheduleInput = z.object({
@@ -76,6 +127,24 @@ export const ScheduleInput = z.object({
 
 export type ScheduleInput = z.infer<typeof ScheduleInput>;
 
+/** Schedule creation payload — the schedule belongs to a tenant barber. */
+export const CreateScheduleInput = ScheduleInput.extend({
+  barberId: z.string().min(1),
+});
+
+export type CreateScheduleInput = z.infer<typeof CreateScheduleInput>;
+
+export const ScheduleUpdate = ScheduleInput.partial();
+
+export type ScheduleUpdate = z.infer<typeof ScheduleUpdate>;
+
+/** Full weekly schedule entry as returned to admins. */
+export const ScheduleView = ScheduleInput.extend({
+  id: z.string().min(1),
+});
+
+export type ScheduleView = z.infer<typeof ScheduleView>;
+
 /** One-off availability override (holiday / day off) for a single date. */
 export const ScheduleExceptionInput = z.object({
   date: z.string().regex(yyyymmddPattern, "Use YYYY-MM-DD"),
@@ -85,3 +154,17 @@ export const ScheduleExceptionInput = z.object({
 });
 
 export type ScheduleExceptionInput = z.infer<typeof ScheduleExceptionInput>;
+
+/** Exception creation payload — the exception belongs to a tenant barber. */
+export const CreateScheduleExceptionInput = ScheduleExceptionInput.extend({
+  barberId: z.string().min(1),
+});
+
+export type CreateScheduleExceptionInput = z.infer<typeof CreateScheduleExceptionInput>;
+
+/** Full exception as returned to admins. */
+export const ScheduleExceptionView = ScheduleExceptionInput.extend({
+  id: z.string().min(1),
+});
+
+export type ScheduleExceptionView = z.infer<typeof ScheduleExceptionView>;

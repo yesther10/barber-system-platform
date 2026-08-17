@@ -1,7 +1,20 @@
 import { z } from "zod";
-import { PaymentStatus } from "./booking.js";
+import { AppointmentStatus, PaymentStatus } from "./booking.js";
 
 export type { PaymentStatus } from "./booking.js";
+
+/**
+ * Session-gated payment/appointment status read for the Pix confirmation
+ * screen (payments spec). Polling needs statuses only — no new sensitive
+ * surface.
+ */
+export const PaymentStatusView = z.object({
+  appointmentId: z.string().min(1),
+  paymentStatus: PaymentStatus,
+  appointmentStatus: AppointmentStatus,
+});
+
+export type PaymentStatusView = z.infer<typeof PaymentStatusView>;
 
 /** Pix payment returned for display (QR payload) on the client. */
 export const PixPaymentView = z.object({

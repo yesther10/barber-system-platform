@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { ManualPaymentInput, PaymentWebhook, PixPaymentView, RefundInput } from "./payments.js";
+import { ManualPaymentInput, PaymentStatusView, PaymentWebhook, PixPaymentView, RefundInput } from "./payments.js";
 
 describe("payments contracts", () => {
   it("parses a pix payment view with a QR payload", () => {
@@ -54,6 +54,37 @@ describe("payments contracts", () => {
         providerEventId: "evt_1",
         providerPaymentId: "pay_1",
         status: "paid",
+      }).success,
+    ).toBe(false);
+  });
+
+  it("parses a payment status view with payment + appointment status", () => {
+    const parsed = PaymentStatusView.safeParse({
+      appointmentId: "apt_1",
+      paymentStatus: "paid",
+      appointmentStatus: "confirmed",
+    });
+    expect(parsed.success).toBe(true);
+    if (parsed.success) {
+      expect(parsed.data.appointmentId).toBe("apt_1");
+      expect(parsed.data.paymentStatus).toBe("paid");
+      expect(parsed.data.appointmentStatus).toBe("confirmed");
+    }
+  });
+
+  it("rejects payment status views with unknown statuses", () => {
+    expect(
+      PaymentStatusView.safeParse({
+        appointmentId: "apt_1",
+        paymentStatus: "lost",
+        appointmentStatus: "confirmed",
+      }).success,
+    ).toBe(false);
+    expect(
+      PaymentStatusView.safeParse({
+        appointmentId: "apt_1",
+        paymentStatus: "paid",
+        appointmentStatus: "unknown",
       }).success,
     ).toBe(false);
   });

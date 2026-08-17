@@ -13,6 +13,9 @@
   "dependencies": {
     "@barber/db": "workspace:*",
     "@barber/contracts": "workspace:*",
+    "@barber/payments": "workspace:*",
+    "dotenv": "^17.4.2",
+    "resend": "^6.0.3",
     "zod": "^4.2.0"
   },
   "devDependencies": {

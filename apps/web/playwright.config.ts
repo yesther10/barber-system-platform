@@ -4,7 +4,7 @@ const PORT = process.env.PORT ?? "3000";
 
 export default defineConfig({
   testDir: "./e2e",
-  fullyParallel: true,
+  fullyParallel: false,
   timeout: 30_000,
   reporter: "list",
   use: {
@@ -12,9 +12,9 @@ export default defineConfig({
     trace: "on-first-retry",
   },
   webServer: {
-    command: "pnpm --filter @barber/web dev",
+    command: 'pnpm exec tsx "./e2e/start-server.ts"',
     url: `http://127.0.0.1:${PORT}/api/health`,
-    reuseExistingServer: true,
+    reuseExistingServer: false,
     timeout: 120_000,
   },
   projects: [{ name: "chromium", use: { ...devices["Desktop Chrome"] } }],
