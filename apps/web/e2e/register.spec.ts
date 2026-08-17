@@ -34,8 +34,12 @@ test("guest registers and is auto-signed-in to the sanitized destination", async
     consent: true,
   });
 
+  // The booking step is DERIVED from the URL selection (booking design: URL
+  // state decision) — `step=confirm` is not part of the selection, so the
+  // sanitized redirect keeps pathname+search (/booking?step=confirm) while an
+  // empty selection renders the first step ("services").
   await expect(page).toHaveURL(/\/booking\?step=confirm$/);
-  await expect(page.getByRole("heading", { name: "Agendamento" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Escolha o serviço" })).toBeVisible();
 });
 
 test("unsafe next targets fall back to the safe booking destination", async ({ page }) => {
