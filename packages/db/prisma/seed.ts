@@ -12,15 +12,6 @@ import { pathToFileURL } from "node:url";
 import { createClient } from "../src/index.js";
 import type { PrismaClient } from "../src/index.js";
 
-/**
- * Demo password for every seeded user: `Barberia2026!`.
- * Precomputed bcrypt hash (bcryptjs, cost 10, `$2b$` format — interoperable
- * with apps/web/lib/password.ts). Stored as a constant so packages/db does not
- * need a bcrypt dependency at seed time.
- */
-const DEMO_PASSWORD_HASH =
-  "$2b$10$NcbkV6qycx9bTrrVfEp/t.KucWZKISbeBXeDE6hooYLZDphPriJU6";
-
 export interface SeedSummary {
   barbershopA: { id: string; slug: string };
   barbershopB: { id: string; slug: string };
@@ -56,7 +47,6 @@ export async function seedDatabase(prisma: PrismaClient): Promise<SeedSummary> {
       name: "Admin Tesoura",
       role: "BARBERSHOP_ADMIN",
       barbershopId: barbershopA.id,
-      passwordHash: DEMO_PASSWORD_HASH,
       consentAcceptedAt: new Date("2026-07-31T10:00:00.000Z"),
       consentPolicyVersion: "2026-07-31",
     },
@@ -67,7 +57,6 @@ export async function seedDatabase(prisma: PrismaClient): Promise<SeedSummary> {
       name: "Carlos Ferreira",
       role: "BARBER",
       barbershopId: barbershopA.id,
-      passwordHash: DEMO_PASSWORD_HASH,
       consentAcceptedAt: new Date("2026-07-31T10:00:00.000Z"),
       consentPolicyVersion: "2026-07-31",
     },
@@ -78,7 +67,6 @@ export async function seedDatabase(prisma: PrismaClient): Promise<SeedSummary> {
       name: "Maria Silva",
       role: "CLIENT",
       barbershopId: barbershopA.id,
-      passwordHash: DEMO_PASSWORD_HASH,
       consentAcceptedAt: new Date("2026-08-01T09:00:00.000Z"),
       consentPolicyVersion: "2026-07-31",
     },
@@ -115,7 +103,6 @@ export async function seedDatabase(prisma: PrismaClient): Promise<SeedSummary> {
       name: "Renato Alves",
       role: "BARBER",
       barbershopId: barbershopB.id,
-      passwordHash: DEMO_PASSWORD_HASH,
       consentAcceptedAt: new Date("2026-07-31T11:00:00.000Z"),
       consentPolicyVersion: "2026-07-31",
     },
@@ -126,7 +113,6 @@ export async function seedDatabase(prisma: PrismaClient): Promise<SeedSummary> {
       name: "João Pereira",
       role: "CLIENT",
       barbershopId: barbershopB.id,
-      passwordHash: DEMO_PASSWORD_HASH,
       consentAcceptedAt: new Date("2026-08-01T10:00:00.000Z"),
       consentPolicyVersion: "2026-07-31",
     },

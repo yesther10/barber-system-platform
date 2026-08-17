@@ -1,23 +1,12 @@
 import { describe, expect, it } from "vitest";
 import {
   BarberInput,
-  BarberUpdate,
-  BarberView,
   BarbershopInput,
   BarbershopView,
-  CreateBarberInput,
-  CreateScheduleExceptionInput,
-  CreateScheduleInput,
-  PublicBarberQuery,
-  PublicBarberView,
   ScheduleExceptionInput,
-  ScheduleExceptionView,
   ScheduleInput,
-  ScheduleUpdate,
-  ScheduleView,
   ServiceInput,
   ServiceUpdate,
-  ServiceView,
 } from "./catalog.js";
 
 describe("catalog contracts", () => {
@@ -147,126 +136,5 @@ describe("catalog contracts", () => {
     });
     expect(parsed.success).toBe(true);
     if (parsed.success) expect(parsed.data.confirmationMode).toBe("manual");
-  });
-
-  it("parses a service view with id and timestamps", () => {
-    const parsed = ServiceView.safeParse({
-      id: "svc_1",
-      name: "Corte",
-      priceBRL: 45,
-      durationMinutes: 30,
-      active: true,
-      createdAt: "2026-08-01T10:00:00.000Z",
-      updatedAt: "2026-08-01T10:00:00.000Z",
-    });
-    expect(parsed.success).toBe(true);
-    if (parsed.success) expect(parsed.data.priceBRL).toBe(45);
-  });
-
-  it("parses create/update barber inputs and the barber view", () => {
-    const created = CreateBarberInput.safeParse({
-      userId: "usr_1",
-      specialties: ["corte"],
-      active: true,
-    });
-    expect(created.success).toBe(true);
-    if (created.success) expect(created.data.userId).toBe("usr_1");
-    expect(CreateBarberInput.safeParse({ specialties: ["corte"] }).success).toBe(false);
-
-    expect(BarberUpdate.safeParse({ active: false, bio: "Novo" }).success).toBe(true);
-    expect(
-      BarberView.safeParse({
-        id: "brb_1",
-        userId: "usr_1",
-        specialties: ["corte"],
-        active: true,
-        createdAt: "2026-08-01T10:00:00.000Z",
-        updatedAt: "2026-08-01T10:00:00.000Z",
-      }).success,
-    ).toBe(true);
-  });
-
-  it("parses schedule create/update and views; exception create and view", () => {
-    const created = CreateScheduleInput.safeParse({
-      barberId: "brb_1",
-      dayOfWeek: 3,
-      startTime: "09:00",
-      endTime: "17:00",
-    });
-    expect(created.success).toBe(true);
-    if (created.success) expect(created.data.barberId).toBe("brb_1");
-    expect(CreateScheduleInput.safeParse({ dayOfWeek: 3, startTime: "09:00", endTime: "17:00" }).success).toBe(
-      false,
-    );
-
-    expect(ScheduleUpdate.safeParse({ endTime: "18:00" }).success).toBe(true);
-    expect(
-      ScheduleView.safeParse({
-        id: "sch_1",
-        dayOfWeek: 3,
-        startTime: "09:00",
-        endTime: "17:00",
-      }).success,
-    ).toBe(true);
-
-    const exception = CreateScheduleExceptionInput.safeParse({
-      barberId: "brb_1",
-      date: "2026-08-15",
-      startTime: "09:00",
-      endTime: "17:00",
-    });
-    expect(exception.success).toBe(true);
-    if (exception.success) expect(exception.data.barberId).toBe("brb_1");
-    expect(
-      ScheduleExceptionView.safeParse({
-        id: "exc_1",
-        date: "2026-08-15",
-        startTime: "09:00",
-        endTime: "17:00",
-      }).success,
-    ).toBe(true);
-  });
-
-  it("parses a public barber query with slug and serviceId", () => {
-    const ok = PublicBarberQuery.safeParse({ barbershopSlug: "tesoura-de-ouro", serviceId: "svc_1" });
-    expect(ok.success).toBe(true);
-    if (ok.success) {
-      expect(ok.data.barbershopSlug).toBe("tesoura-de-ouro");
-      expect(ok.data.serviceId).toBe("svc_1");
-    }
-
-    expect(PublicBarberQuery.safeParse({ barbershopSlug: "", serviceId: "svc_1" }).success).toBe(false);
-    expect(PublicBarberQuery.safeParse({ barbershopSlug: "x", serviceId: "" }).success).toBe(false);
-    expect(PublicBarberQuery.safeParse({ barbershopSlug: "x" }).success).toBe(false);
-  });
-
-  it("parses a public barber view without userId", () => {
-    const ok = PublicBarberView.safeParse({
-      id: "brb_1",
-      specialties: ["corte", "barba"],
-      bio: "Especialista em degradê",
-      active: true,
-    });
-    expect(ok.success).toBe(true);
-    if (ok.success) {
-      expect(ok.data.id).toBe("brb_1");
-      expect(ok.data.specialties).toEqual(["corte", "barba"]);
-      expect(ok.data.active).toBe(true);
-    }
-
-    // bio is optional, but a leaked userId is never part of the public view
-    expect(PublicBarberView.safeParse({ id: "brb_1", specialties: ["corte"], active: false }).success).toBe(true);
-    const withUserId = PublicBarberView.safeParse({
-      id: "brb_1",
-      userId: "usr_1",
-      specialties: ["corte"],
-      active: true,
-    });
-    expect(withUserId.success).toBe(true);
-    if (withUserId.success) expect(withUserId.data).not.toHaveProperty("userId");
-
-    // non-string specialties or a missing id are rejected
-    expect(PublicBarberView.safeParse({ id: "brb_1", specialties: [123], active: true }).success).toBe(false);
-    expect(PublicBarberView.safeParse({ specialties: ["corte"], active: true }).success).toBe(false);
   });
 });

@@ -2,11 +2,8 @@
   "$schema": "https://turbo.build/schema.json",
   "ui": "tui",
   "tasks": {
-    "generate": {
-      "outputs": ["src/generated/**"]
-    },
     "build": {
-      "dependsOn": ["^build", "generate"],
+      "dependsOn": ["^build"],
       "outputs": [".next/**", "!.next/cache/**", "dist/**"]
     },
     "dev": {
@@ -14,7 +11,7 @@
       "persistent": true
     },
     "typecheck": {
-      "dependsOn": ["^build", "generate"],
+      "dependsOn": ["^build"],
       "outputs": []
     },
     "lint": {

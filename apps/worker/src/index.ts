@@ -1,17 +1,15 @@
-import { config as loadEnv } from "dotenv";
-import { resolve } from "node:path";
-import { createClient, type PrismaClient } from "@barber/db";
-import { NotificationStatus, NotificationType } from "@barber/db";
-import { createMercadoPagoProvider, parseMercadoPagoCredentials, reconcilePayment, type PixProvider } from "@barber/payments";
-import { Resend } from "resend";
-import { buildNotificationEmail, computeRetryBackoff, DELIVERABLE_STATUSES, mapPaymentStatus, type EmailMessage } from "./notifications.js";
-
-loadEnv({ path: resolve(import.meta.dirname, "../../../.env") });
-loadEnv();
-
-function hasWithdrawnConsent(user: { consentWithdrawnAt: Date | null }) {
-  return user.consentWithdrawnAt !== null;
-}
+/**
+ * @barber/worker — in-repo background processor.
+ *
+ * Every 15 minutes it runs three idempotent scans (design/worker):
+ *   1. outbox        — deliver queued transactional-outbox notifications.
+ *   2. reminderScan  — send PT-BR reminders for imminent appointments.
+ *   3. paymentReconcile — recover Pix payments marked pending past the
+ *      safety net (covers webhooks the provider never delivered).
+ *
+ * Scan implementations land with the worker work unit (Phase 5). This file
+ * only establishes the loop contract and processes a tick.
+ */
 
 export interface ScanResult {
   scan: "outbox" | "reminder" | "payment-reconcile";
@@ -19,140 +17,28 @@ export interface ScanResult {
   ranAt: Date;
 }
 
-export interface WorkerDependencies {
-  db: PrismaClient;
-  now?: Date;
-  sendEmail: (message: EmailMessage) => Promise<{ id: string }>;
-  paymentProviderFactory: (credentials: { accessToken: string; webhookSecret?: string | null }) => PixProvider;
+/** Bootstrap no-op scans; replaced by real workers in the worker work unit. */
+export async function outboxScan(): Promise<ScanResult> {
+  return { scan: "outbox", handled: 0, ranAt: new Date() };
 }
 
-async function loadAppointmentDetails(db: PrismaClient, appointmentId: string) {
-  return db.appointment.findUnique({
-    where: { id: appointmentId },
-    include: {
-      barbershop: true,
-      barber: { include: { user: true } },
-      client: true,
-      service: true,
-    },
-  });
+export async function reminderScan(): Promise<ScanResult> {
+  return { scan: "reminder", handled: 0, ranAt: new Date() };
 }
 
-export async function outboxScan(deps?: WorkerDependencies): Promise<ScanResult> {
-  if (!deps) return { scan: "outbox", handled: 0, ranAt: new Date() };
-  const now = deps.now ?? new Date();
-  const rows = await deps.db.emailNotification.findMany({
-    where: { status: { in: [...DELIVERABLE_STATUSES] }, nextAttemptAt: { lte: now } },
-    orderBy: { createdAt: "asc" },
-  });
-
-  for (const row of rows) {
-    const details = await loadAppointmentDetails(deps.db, row.appointmentId);
-    if (!details?.client.email) continue;
-    if (row.type === NotificationType.REMINDER && hasWithdrawnConsent(details.client)) {
-      await deps.db.emailNotification.delete({ where: { id: row.id } });
-      continue;
-    }
-    const email = buildNotificationEmail(row.type, {
-      appointmentId: details.id,
-      appointmentStatus: details.status.toLowerCase(),
-      barberName: details.barber.user.name,
-      clientEmail: details.client.email,
-      clientName: details.client.name,
-      paymentStatus: mapPaymentStatus(details.paymentStatus),
-      serviceName: details.service.name,
-      startsAt: details.startsAt,
-      timezone: details.barbershop.timezone,
-    });
-    try {
-      await deps.sendEmail({
-        to: details.client.email,
-        idempotencyKey: row.id,
-        ...email,
-      });
-      await deps.db.emailNotification.update({
-        where: { id: row.id },
-        data: { status: NotificationStatus.SENT, sentAt: now },
-      });
-    } catch {
-      await deps.db.emailNotification.update({
-        where: { id: row.id },
-        data: {
-          status: NotificationStatus.FAILED,
-          retryCount: { increment: 1 },
-          nextAttemptAt: new Date(now.getTime() + computeRetryBackoff(row.retryCount)),
-        },
-      });
-    }
-  }
-
-  return { scan: "outbox", handled: rows.length, ranAt: now };
+export async function paymentReconcileScan(): Promise<ScanResult> {
+  return { scan: "payment-reconcile", handled: 0, ranAt: new Date() };
 }
 
-export async function reminderScan(deps?: WorkerDependencies): Promise<ScanResult> {
-  if (!deps) return { scan: "reminder", handled: 0, ranAt: new Date() };
-  const now = deps.now ?? new Date();
-  const appointments = await deps.db.appointment.findMany({
-    where: { status: "CONFIRMED", startsAt: { gt: now } },
-    include: { barbershop: true, client: true, notifications: { where: { type: NotificationType.REMINDER } } },
-  });
-
-  let handled = 0;
-  for (const appointment of appointments) {
-    const dueAt = appointment.startsAt.getTime() - appointment.barbershop.reminderLeadHours * 3_600_000;
-    if (dueAt > now.getTime()) continue;
-    if (appointment.notifications.length > 0) continue;
-    if (hasWithdrawnConsent(appointment.client)) continue;
-    await deps.db.emailNotification.create({
-      data: {
-        appointmentId: appointment.id,
-        type: NotificationType.REMINDER,
-        status: NotificationStatus.QUEUED,
-        nextAttemptAt: now,
-        payload: { appointmentId: appointment.id },
-      },
-    });
-    handled += 1;
-  }
-  return { scan: "reminder", handled, ranAt: now };
-}
-
-export async function paymentReconcileScan(deps?: WorkerDependencies): Promise<ScanResult> {
-  if (!deps) return { scan: "payment-reconcile", handled: 0, ranAt: new Date() };
-  const now = deps.now ?? new Date();
-  const threshold = new Date(now.getTime() - 10 * 60_000);
-  const appointments = await deps.db.appointment.findMany({
-    where: {
-      paymentStatus: "PENDING",
-      providerPaymentId: { not: null },
-      createdAt: { lte: threshold },
-    },
-    include: { barbershop: true },
-  });
-
-  let handled = 0;
-  for (const appointment of appointments) {
-    const credentials = parseMercadoPagoCredentials(appointment.barbershop.pixCredentials);
-    if (!credentials || !appointment.providerPaymentId) continue;
-    const provider = deps.paymentProviderFactory(credentials);
-    const result = await reconcilePayment(deps.db, provider, {
-      providerPaymentId: appointment.providerPaymentId,
-      now,
-    });
-    if (result) handled += 1;
-  }
-  return { scan: "payment-reconcile", handled, ranAt: now };
-}
-
-export async function runCronCycle(deps?: WorkerDependencies): Promise<ScanResult[]> {
-  return Promise.all([outboxScan(deps), reminderScan(deps), paymentReconcileScan(deps)]);
+export async function runCronCycle(): Promise<ScanResult[]> {
+  return Promise.all([outboxScan(), reminderScan(), paymentReconcileScan()]);
 }
 
 /** Schedule the cycle every `intervalMs`, flushing immediately on start. */
 export function startCron(
   intervalMs: number,
-  runner: () => Promise<ScanResult[]> = () => runCronCycle(),
-  logger: Pick<Console, "log"> = console,
+  runner: () => Promise<ScanResult[]> = runCronCycle,
+  logger: Console = console,
 ): () => void {
   void runner().then((results) => logger.log("[worker] tick", results));
   const timer = setInterval(() => {
@@ -162,48 +48,8 @@ export function startCron(
   return () => clearInterval(timer);
 }
 
-export function defaultPaymentProviderFactory(credentials: { accessToken: string; webhookSecret?: string | null }) {
-  return createMercadoPagoProvider(credentials);
-}
-
-export function createResendSender(apiKey: string, from: string) {
-  const resend = new Resend(apiKey);
-  return async (message: EmailMessage) => {
-    const result = await resend.emails.send(
-      {
-        from,
-        to: [message.to],
-        subject: message.subject,
-        html: message.html,
-        text: message.text,
-      },
-      { idempotencyKey: message.idempotencyKey },
-    );
-    if (result.error) {
-      throw new Error(result.error.message);
-    }
-    return { id: result.data?.id ?? message.idempotencyKey };
-  };
-}
-
-function createDefaultWorkerDependencies(): WorkerDependencies {
-  const databaseUrl = process.env.DATABASE_URL;
-  const resendApiKey = process.env.RESEND_API_KEY;
-  const resendFromEmail = process.env.RESEND_FROM_EMAIL;
-  if (!databaseUrl) throw new Error("DATABASE_URL is not set");
-  if (!resendApiKey) throw new Error("RESEND_API_KEY is not set");
-  if (!resendFromEmail) throw new Error("RESEND_FROM_EMAIL is not set");
-
-  return {
-    db: createClient(databaseUrl),
-    sendEmail: createResendSender(resendApiKey, resendFromEmail),
-    paymentProviderFactory: defaultPaymentProviderFactory,
-  };
-}
-
 const CRON_INTERVAL_MS = 15 * 60 * 1000;
 
 if (import.meta.url === `file://${process.argv[1]}`) {
-  const deps = createDefaultWorkerDependencies();
-  startCron(CRON_INTERVAL_MS, () => runCronCycle(deps));
+  startCron(CRON_INTERVAL_MS);
 }

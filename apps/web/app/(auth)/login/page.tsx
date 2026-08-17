@@ -1,48 +1,11 @@
-import { redirect } from "next/navigation";
-import Link from "next/link";
-import { authConfig } from "@/lib/auth.config";
-import { auth } from "@/lib/auth";
-import { sanitizeNextPath } from "@/lib/auth-redirect";
-import LoginForm from "./login-form";
-
-type SearchParams = Promise<Record<string, string | string[] | undefined>> | Record<string, string | string[] | undefined>;
-
-function pickFirst(value: string | string[] | undefined) {
-  return Array.isArray(value) ? value[0] : value;
-}
-
-export default async function LoginPage({
-  searchParams,
-}: {
-  searchParams?: SearchParams;
-}) {
-  const params = (await searchParams) ?? {};
-  const nextPath = sanitizeNextPath(pickFirst(params.next));
-  const session = await auth();
-
-  if (session?.user?.id) {
-    redirect(nextPath);
-  }
-
-  const googleEnabled = authConfig.providers.some((provider) => provider.id === "google");
-
+export default function LoginPage() {
   return (
-    <main className="flex min-h-screen items-center justify-center px-6 py-10">
-      <div className="w-full max-w-md space-y-6 rounded-3xl border border-slate-200 bg-white p-8 shadow-sm">
-        <div className="space-y-2 text-center">
-          <h1 className="text-3xl font-semibold">Entrar</h1>
-          <p className="text-pretty text-sm text-slate-600">
-            Acesse sua conta para continuar o agendamento com segurança.
-          </p>
-        </div>
-        <LoginForm nextPath={nextPath} googleEnabled={googleEnabled} />
-        <p className="pt-2 text-center text-sm text-slate-600">
-          Ainda não tem conta?{" "}
-          <Link href="/register" className="font-medium text-slate-900 underline underline-offset-2 hover:text-slate-700">
-            Criar conta
-          </Link>
-        </p>
-      </div>
+    <main className="flex min-h-screen flex-col items-center justify-center gap-4 px-6 text-center">
+      <h1 className="text-3xl font-semibold">Entrar</h1>
+      <p className="max-w-md text-pretty text-slate-600">
+        Autenticação com e-mail/senha e Google chega na fase de identidade e
+        multitenancy.
+      </p>
     </main>
   );
 }
