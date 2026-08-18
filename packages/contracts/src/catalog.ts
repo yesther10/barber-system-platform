@@ -118,6 +118,18 @@ export const PublicBarberView = z.object({
 
 export type PublicBarberView = z.infer<typeof PublicBarberView>;
 
+/**
+ * Public directory entry returned by the guest barbershop list. Deliberately
+ * has NO `id` — internal identity never leaves the API (mirrors
+ * `PublicBarberView`'s minimal surface).
+ */
+export const PublicBarbershopView = z.object({
+  slug: z.string().min(1),
+  name: z.string().min(1),
+});
+
+export type PublicBarbershopView = z.infer<typeof PublicBarbershopView>;
+
 /** Weekly recurring availability. dayOfWeek: 1=Monday … 7=Sunday. */
 export const ScheduleInput = z.object({
   dayOfWeek: z.number().int().min(1).max(7),
