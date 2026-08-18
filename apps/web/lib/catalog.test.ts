@@ -1,14 +1,16 @@
 /**
- * Unit tests for the pure catalog helpers (task 4.1): window ordering rule
- * and the view mappers (Decimal → number, Date → ISO). The DB CRUD paths are
- * covered by tests/integration/catalog.test.ts against a real MySQL.
+ * Unit tests for the catalog helpers: window ordering rule, the view mappers
+ * (Decimal → number, Date → ISO) and the public directory query shape. The
+ * DB CRUD paths are covered by tests/integration/catalog.test.ts against a
+ * real MySQL.
  */
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { Prisma } from "@barber/db";
-import type { Barber, Schedule, ScheduleException, Service } from "@barber/db";
+import type { Barber, PrismaClient, Schedule, ScheduleException, Service } from "@barber/db";
 import {
   assertWindowOrder,
   dateKeyOf,
+  listPublicBarbershops,
   toBarberView,
   toExceptionView,
   toScheduleView,
@@ -100,5 +102,55 @@ describe("toBarberView / toScheduleView / toExceptionView / dateKeyOf", () => {
 
   it("formats any Date as YYYY-MM-DD", () => {
     expect(dateKeyOf(at("2026-12-31T23:59:59.999Z"))).toBe("2026-12-31");
+  });
+});
+
+describe("listPublicBarbershops", () => {
+  it("lists barbershops with at least one active service, projecting slug and name", async () => {
+    const findMany = vi.fn().mockResolvedValue([
+      { slug: "tesoura-de-ouro", name: "Tesoura de Ouro" },
+      { slug: "navalha", name: "Navalha & Cia" },
+    ]);
+    const db = { barbershop: { findMany } } as unknown as PrismaClient;
+
+    const shops = await listPublicBarbershops(db);
+
+    expect(findMany).toHaveBeenCalledWith({
+      where: { services: { some: { active: true } } },
+      select: { slug: true, name: true },
+      orderBy: { name: "asc" },
+    });
+    expect(shops).toEqual([
+      { slug: "tesoura-de-ouro", name: "Tesoura de Ouro" },
+      { slug: "navalha", name: "Navalha & Cia" },
+    ]);
+  });
+
+  it("returns an empty list when no barbershop has an active service", async () => {
+    const findMany = vi.fn().mockResolvedValue([]);
+    const db = { barbershop: { findMany } } as unknown as PrismaClient;
+
+    const shops = await listPublicBarbershops(db);
+
+    // the relation filter (some: { active: true }) is what makes this empty
+    expect(findMany).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { services: { some: { active: true } } } }),
+    );
+    expect(shops).toEqual([]);
+  });
+
+  it("does not leak internal identity fields through the projection", async () => {
+    const findMany = vi.fn().mockResolvedValue([{ slug: "tesoura-de-ouro", name: "Tesoura de Ouro" }]);
+    const db = { barbershop: { findMany } } as unknown as PrismaClient;
+
+    const shops = await listPublicBarbershops(db);
+
+    // the select projection limits the payload to slug+name — no id/userId/pix
+    expect(findMany).toHaveBeenCalledWith(
+      expect.objectContaining({ select: { slug: true, name: true } }),
+    );
+    expect(shops[0]).not.toHaveProperty("id");
+    expect(shops[0]).not.toHaveProperty("userId");
+    expect(shops[0]).not.toHaveProperty("pixProvider");
   });
 });

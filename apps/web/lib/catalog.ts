@@ -21,6 +21,7 @@ import {
 import type {
   BarberView,
   PublicBarberView,
+  PublicBarbershopView,
   ScheduleExceptionView,
   ScheduleView,
   ServiceView,
@@ -395,6 +396,19 @@ export async function deleteException(db: PrismaClient, barbershopId: string, id
   const existing = await db.scheduleException.findFirst({ where: { id, barber: { barbershopId } } });
   if (!existing) throw new ExceptionNotFoundError();
   await db.scheduleException.delete({ where: { id } });
+}
+
+/**
+ * Public barbershop directory (catalog spec): every tenant with at least one
+ * ACTIVE service, projected to `{ slug, name }` only (no internal identity)
+ * and ordered by name. Listability is a relation filter — no schema change.
+ */
+export async function listPublicBarbershops(db: PrismaClient): Promise<PublicBarbershopView[]> {
+  return db.barbershop.findMany({
+    where: { services: { some: { active: true } } },
+    select: { slug: true, name: true },
+    orderBy: { name: "asc" },
+  });
 }
 
 /** Public catalog browse: only active services of the tenant (404 for unknown slug). */
