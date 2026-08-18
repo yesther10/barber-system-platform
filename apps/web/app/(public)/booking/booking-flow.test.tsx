@@ -6,6 +6,7 @@ import {
   ConfirmStep,
   DateSlotStep,
   ServicesStep,
+  TenantStep,
   barbersErrorForRender,
   barbersForRender,
   slotsErrorForRender,
@@ -18,6 +19,29 @@ vi.mock("next/navigation", () => ({
 }));
 
 describe("presentational steps (PT-BR empty states)", () => {
+  it("tenant step shows the empty state when no barbershop is listable", () => {
+    const html = renderToStaticMarkup(
+      <TenantStep barbershops={[]} onSelect={() => undefined} />,
+    );
+
+    expect(html).toContain("Nenhuma barbearia disponível no momento.");
+  });
+
+  it("tenant step lists barbershop names from the public directory", () => {
+    const html = renderToStaticMarkup(
+      <TenantStep
+        barbershops={[
+          { slug: "tesoura-de-ouro", name: "Tesoura de Ouro" },
+          { slug: "barba-real", name: "Barba Real" },
+        ]}
+        onSelect={() => undefined}
+      />,
+    );
+
+    expect(html).toContain("Tesoura de Ouro");
+    expect(html).toContain("Barba Real");
+  });
+
   it("services step shows the empty state when no services", () => {
     const html = renderToStaticMarkup(
       <ServicesStep services={[]} onSelect={() => undefined} />,
@@ -207,10 +231,11 @@ describe("booking flow container (URL-driven step progression)", () => {
     expect(html).toContain("Escolha o dia e horário");
   });
 
-  it("renders the services step for an empty tenant slug", () => {
+  it("renders the tenant picker for an empty tenant slug, before any catalog step", () => {
     const html = renderToStaticMarkup(<BookingFlow selection={{ slug: "" }} />);
 
-    expect(html).toContain("Escolha o serviço");
+    expect(html).toContain("Escolha a barbearia");
+    expect(html).not.toContain("Escolha o serviço");
   });
 });
 

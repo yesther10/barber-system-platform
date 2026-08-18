@@ -4,6 +4,7 @@ import {
   createPixPayment,
   fetchPaymentStatus,
   fetchPublicBarbers,
+  fetchPublicBarbershops,
   fetchPublicServices,
   fetchSlots,
   type BookingApiDeps,
@@ -35,6 +36,48 @@ const barberView = {
   bio: "Especialista",
   active: true,
 };
+
+describe("fetchPublicBarbershops", () => {
+  const directory = [{ slug: "tesoura", name: "Tesoura E2E" }];
+
+  it("returns the directory list on 200", async () => {
+    const fetchFn = vi.fn().mockResolvedValue(jsonResponse(directory, 200));
+
+    const result = await fetchPublicBarbershops(deps(fetchFn));
+
+    expect(result).toEqual({ ok: true, data: directory });
+    expect(fetchFn).toHaveBeenCalledWith(
+      "/api/public/barbershops",
+      expect.objectContaining({ method: "GET" }),
+    );
+  });
+
+  it("maps a 500 to a tenant-step failure with the network message", async () => {
+    const fetchFn = vi.fn().mockResolvedValue(jsonResponse({ error: "INTERNAL" }, 500));
+
+    const result = await fetchPublicBarbershops(deps(fetchFn));
+
+    expect(result).toMatchObject({
+      ok: false,
+      step: "tenant",
+      code: "INTERNAL",
+      message: "Não foi possível carregar os dados. Tente novamente.",
+    });
+  });
+
+  it("maps a rejected fetch to a tenant-step network failure", async () => {
+    const fetchFn = vi.fn().mockRejectedValue(new TypeError("network down"));
+
+    const result = await fetchPublicBarbershops(deps(fetchFn));
+
+    expect(result).toMatchObject({
+      ok: false,
+      step: "tenant",
+      code: "NETWORK",
+      message: "Não foi possível carregar os dados. Tente novamente.",
+    });
+  });
+});
 
 describe("fetchPublicServices", () => {
   it("returns the service list on 200", async () => {

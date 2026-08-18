@@ -1,4 +1,7 @@
+import { readFileSync } from "node:fs";
 import { expect, test } from "@playwright/test";
+
+const FIXTURE_PATH = "/tmp/opencode/barber-system-platform-e2e.json";
 
 const CONSENT_VERSION = "2026-08-03";
 const PASSWORD = "s3nh4-segura";
@@ -36,10 +39,15 @@ test("guest registers and is auto-signed-in to the sanitized destination", async
 
   // The booking step is DERIVED from the URL selection (booking design: URL
   // state decision) — `step=confirm` is not part of the selection, so the
-  // sanitized redirect keeps pathname+search (/booking?step=confirm) while an
-  // empty selection renders the first step ("services").
+  // sanitized redirect keeps pathname+search (/booking?step=confirm). An empty
+  // selection now renders the directory picker ("tenant") — the delta spec's
+  // safe-default: a navigable picker state, never a dead end.
   await expect(page).toHaveURL(/\/booking\?step=confirm$/);
-  await expect(page.getByRole("heading", { name: "Escolha o serviço" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Escolha a barbearia" })).toBeVisible();
+  const fixture = JSON.parse(readFileSync(FIXTURE_PATH, "utf8")) as {
+    shop: { name: string };
+  };
+  await expect(page.getByRole("button", { name: fixture.shop.name })).toBeVisible();
 });
 
 test("unsafe next targets fall back to the safe booking destination", async ({ page }) => {

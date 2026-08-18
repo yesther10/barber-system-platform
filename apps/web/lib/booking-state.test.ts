@@ -12,6 +12,14 @@ import {
 } from "./booking-state";
 
 describe("bookingStepOf", () => {
+  it("starts at tenant when no slug is present (directory entry step)", () => {
+    expect(bookingStepOf({ slug: "" })).toBe("tenant");
+  });
+
+  it("stays at tenant for an empty slug even when downstream params exist", () => {
+    expect(bookingStepOf({ slug: "", serviceId: "svc_1" })).toBe("tenant");
+  });
+
   it("starts at services until a service is chosen", () => {
     expect(bookingStepOf({ slug: "tesoura" })).toBe("services");
   });
@@ -117,6 +125,18 @@ describe("bookingReducer step order", () => {
       { type: "clear-slot" },
     ]);
     expect(state).toEqual({ slug: "tesoura", serviceId: "svc_1", barberId: "brb_1", date: "2026-08-20" });
+  });
+
+  it("select-barbershop sets the slug and clears every downstream selection", () => {
+    const state = apply([
+      { type: "select-service", serviceId: "svc_1" },
+      { type: "select-barber", barberId: "brb_1" },
+      { type: "select-date", date: "2026-08-20" },
+      { type: "select-slot", slot: "2026-08-20T12:00:00.000Z" },
+      { type: "booking-created", appointmentId: "appt_1" },
+      { type: "select-barbershop", slug: "barba-real" },
+    ]);
+    expect(state).toEqual({ slug: "barba-real" });
   });
 
   it("booking-created records the appointment id and keeps the full selection", () => {
