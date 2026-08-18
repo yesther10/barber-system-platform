@@ -10,7 +10,7 @@ export const dynamic = "force-dynamic";
  * as `PublicBarbershopView` ({ slug, name } only). Bare GET with no params in
  * v1, so there are no 400/404 branches; unexpected errors propagate → 500.
  */
-export async function GET() {
+export async function GET(_request: Request) {
   try {
     const barbershops = await listPublicBarbershops(getPrisma());
     return NextResponse.json(barbershops);
