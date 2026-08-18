@@ -30,12 +30,12 @@ Commands: `pnpm test <path>` · `pnpm typecheck` · `pnpm lint` · `pnpm test:in
 ### Phase 1: Foundation
 
 - [x] 1.1 **PublicBarbershopView contract** — add Zod `{ slug, name }` view to `packages/contracts/src/catalog.ts`, export from `src/index.ts`. Test-first: extend `packages/contracts/src/catalog.test.ts` — parses slug+name; rejects `id`/empty. Verify: `pnpm test packages/contracts/src/catalog.test.ts`; `pnpm typecheck`. Deps: none.
-- [ ] 1.2 **listPublicBarbershops service** — `apps/web/lib/catalog.ts`: `findMany({ where: { services: { some: { active: true } } }, select: { slug, name }, orderBy: { name: "asc" } })`. Test-first: extend `apps/web/lib/catalog.test.ts` (mocked prisma) — ≥1 active listed; all-inactive excluded; name asc; no id/userId leak. Verify: `pnpm test apps/web/lib/catalog.test.ts`. Deps: 1.1.
+- [x] 1.2 **listPublicBarbershops service** — `apps/web/lib/catalog.ts`: `findMany({ where: { services: { some: { active: true } } }, select: { slug, name }, orderBy: { name: "asc" } })`. Test-first: extend `apps/web/lib/catalog.test.ts` (mocked prisma) — ≥1 active listed; all-inactive excluded; name asc; no id/userId leak. Verify: `pnpm test apps/web/lib/catalog.test.ts`. Deps: 1.1.
 
 ### Phase 2: Route + Verification
 
-- [ ] 1.3 **GET /api/public/barbershops route** — create `apps/web/app/api/public/barbershops/route.ts`: thin GET, `force-dynamic`, try/catch rethrow → 500. Test-first: create `route.test.ts` (mirror `[slug]/barbers/route.test.ts`) — 200 list, 200 empty `[]`, 500 on throw, no session. Verify: `pnpm test apps/web/app/api/public/barbershops/route.test.ts`; `pnpm typecheck`. Deps: 1.2.
-- [ ] 1.4 **Integration: directory scenarios** — extend `tests/integration/catalog.test.ts`: both listed; all-inactive excluded; empty → 200 `[]`; payload only slug/name. Verify: `pnpm test:integration`. Deps: 1.2–1.3.
+- [x] 1.3 **GET /api/public/barbershops route** — create `apps/web/app/api/public/barbershops/route.ts`: thin GET, `force-dynamic`, try/catch rethrow → 500. Test-first: create `route.test.ts` (mirror `[slug]/barbers/route.test.ts`) — 200 list, 200 empty `[]`, 500 on throw, no session. Verify: `pnpm test apps/web/app/api/public/barbershops/route.test.ts`; `pnpm typecheck`. Deps: 1.2.
+- [x] 1.4 **Integration: directory scenarios** — extend `tests/integration/catalog.test.ts`: both listed; all-inactive excluded; empty → 200 `[]`; payload only slug/name. Verify: `pnpm test:integration`. Deps: 1.2–1.3.
 
 ## PR 2 — UI + E2E (tenant step, picker, i18n)
 
