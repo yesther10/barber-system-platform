@@ -21,6 +21,7 @@ import {
   InvalidInputError,
   listBarbers,
   listExceptions,
+  listPublicBarbershops,
   listSchedules,
   listServices,
   ScheduleNotFoundError,
@@ -673,6 +674,68 @@ describe("catalog admin CRUD", () => {
       expect(renderReportCsv(report).startsWith("\uFEFF")).toBe(true);
       expect(renderReportCsv(report)).toContain("groupKey,total,pending,confirmed,completed,cancelled,completionRate,cancellationRate,revenueBRL");
       expect(renderReportCsv(report)).toContain("all,0,0,0,0,0,0.00,0.00,0.00");
+    });
+  });
+
+  describe("public barbershop directory (catalog spec)", () => {
+    /** A tenant with one service — active by default, deactivated when requested. */
+    async function directoryShop(tag: string, opts: { serviceActive?: boolean } = {}) {
+      const f = await shopFixture(prisma, `pub-d-${tag}`);
+      await createService(prisma, f.shop.id, {
+        name: "Corte",
+        priceBRL: 45,
+        durationMinutes: 30,
+        active: opts.serviceActive ?? true,
+      });
+      return f;
+    }
+
+    it("lists barbershops with an active service as slug+name only, name-ascending", async () => {
+      const navalha = await directoryShop("navalha");
+      const tesoura = await directoryShop("tesoura");
+      await prisma.barbershop.update({ where: { id: navalha.shop.id }, data: { name: "Navalha & Cia" } });
+      await prisma.barbershop.update({ where: { id: tesoura.shop.id }, data: { name: "Tesoura de Ouro" } });
+
+      const shops = await listPublicBarbershops(prisma);
+      const ours = shops.filter((s) => s.slug === navalha.shop.slug || s.slug === tesoura.shop.slug);
+
+      // both listable tenants are present, in name order, as { slug, name }
+      expect(ours).toEqual([
+        { slug: navalha.shop.slug, name: "Navalha & Cia" },
+        { slug: tesoura.shop.slug, name: "Tesoura de Ouro" },
+      ]);
+
+      // public-view discipline: no internal identity or payment fields anywhere
+      expect(shops.length).toBeGreaterThanOrEqual(2);
+      for (const entry of shops) {
+        expect(Object.keys(entry).sort()).toEqual(["name", "slug"]);
+      }
+    });
+
+    it("excludes a barbershop whose services are all deactivated", async () => {
+      const inactive = await directoryShop("inactive", { serviceActive: false });
+      await prisma.barbershop.update({ where: { id: inactive.shop.id }, data: { name: "Barbearia Fechada" } });
+      const active = await directoryShop("active");
+      await prisma.barbershop.update({ where: { id: active.shop.id }, data: { name: "Tesoura Viva" } });
+
+      const slugs = (await listPublicBarbershops(prisma)).map((s) => s.slug);
+
+      expect(slugs).toContain(active.shop.slug);
+      expect(slugs).not.toContain(inactive.shop.slug);
+    });
+
+    it("adds nothing for inactive-only tenants (empty-result behavior at the DB layer)", async () => {
+      // The suite shares one MySQL with other fixtures, so a literally empty
+      // table is not reachable here; the literal 200 `[]` response is covered
+      // by the route unit test. This proves the same filter at the DB layer:
+      // these tenants have only deactivated services and must never appear.
+      const a = await directoryShop("empty-a", { serviceActive: false });
+      const b = await directoryShop("empty-b", { serviceActive: false });
+
+      const slugs = (await listPublicBarbershops(prisma)).map((s) => s.slug);
+
+      expect(slugs).not.toContain(a.shop.slug);
+      expect(slugs).not.toContain(b.shop.slug);
     });
   });
 });

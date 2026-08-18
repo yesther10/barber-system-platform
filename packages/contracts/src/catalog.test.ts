@@ -10,6 +10,7 @@ import {
   CreateScheduleInput,
   PublicBarberQuery,
   PublicBarberView,
+  PublicBarbershopView,
   ScheduleExceptionInput,
   ScheduleExceptionView,
   ScheduleInput,
@@ -268,5 +269,28 @@ describe("catalog contracts", () => {
     // non-string specialties or a missing id are rejected
     expect(PublicBarberView.safeParse({ id: "brb_1", specialties: [123], active: true }).success).toBe(false);
     expect(PublicBarberView.safeParse({ specialties: ["corte"], active: true }).success).toBe(false);
+  });
+
+  it("parses a public barbershop directory view with slug and name only", () => {
+    const ok = PublicBarbershopView.safeParse({ slug: "tesoura-de-ouro", name: "Tesoura de Ouro" });
+    expect(ok.success).toBe(true);
+    if (ok.success) {
+      expect(ok.data.slug).toBe("tesoura-de-ouro");
+      expect(ok.data.name).toBe("Tesoura de Ouro");
+    }
+
+    // a leaked id is never part of the public directory view
+    const withId = PublicBarbershopView.safeParse({
+      id: "bshp_1",
+      slug: "tesoura-de-ouro",
+      name: "Tesoura de Ouro",
+    });
+    expect(withId.success).toBe(true);
+    if (withId.success) expect(withId.data).not.toHaveProperty("id");
+
+    // empty or missing slug/name is rejected
+    expect(PublicBarbershopView.safeParse({ slug: "", name: "Tesoura de Ouro" }).success).toBe(false);
+    expect(PublicBarbershopView.safeParse({ slug: "tesoura-de-ouro", name: "" }).success).toBe(false);
+    expect(PublicBarbershopView.safeParse({ slug: "tesoura-de-ouro" }).success).toBe(false);
   });
 });
