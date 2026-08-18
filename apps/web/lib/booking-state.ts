@@ -7,7 +7,7 @@
  * the login `next` path for free (sanitizeNextPath keeps pathname+search).
  * All functions are pure so the reducer and codec are unit-testable.
  */
-export type BookingStep = "services" | "barbers" | "date-slot" | "confirm" | "waiting";
+export type BookingStep = "tenant" | "services" | "barbers" | "date-slot" | "confirm" | "waiting";
 
 export interface BookingSelection {
   slug: string;
@@ -22,6 +22,7 @@ export interface BookingSelection {
 }
 
 export type BookingAction =
+  | { type: "select-barbershop"; slug: string }
   | { type: "select-service"; serviceId: string }
   | { type: "select-barber"; barberId: string }
   | { type: "select-date"; date: string }
@@ -29,9 +30,14 @@ export type BookingAction =
   | { type: "clear-slot" }
   | { type: "booking-created"; appointmentId: string };
 
-/** Which step the selection is on: services → barbers → date/slot → confirm → waiting. */
+/**
+ * Which step the selection is on: tenant (no slug) → services → barbers →
+ * date/slot → confirm → waiting. The tenant step is the directory entry:
+ * a slug-less selection lands on the picker BEFORE any catalog step.
+ */
 export function bookingStepOf(selection: BookingSelection): BookingStep {
   if (selection.appointmentId) return "waiting";
+  if (!selection.slug) return "tenant";
   if (!selection.serviceId) return "services";
   if (!selection.barberId) return "barbers";
   if (!selection.date || !selection.slot) return "date-slot";
@@ -44,6 +50,18 @@ export function bookingReducer(
   action: BookingAction,
 ): BookingSelection {
   switch (action.type) {
+    case "select-barbershop":
+      // New tenant picked from the directory — the whole downstream selection
+      // (including any appointment) belongs to the previous barbershop.
+      return {
+        ...selection,
+        slug: action.slug,
+        serviceId: undefined,
+        barberId: undefined,
+        date: undefined,
+        slot: undefined,
+        appointmentId: undefined,
+      };
     case "select-service":
       return { ...selection, serviceId: action.serviceId, barberId: undefined, date: undefined, slot: undefined };
     case "select-barber":

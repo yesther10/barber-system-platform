@@ -13,6 +13,7 @@ import type {
   PaymentStatusView,
   PixPaymentView,
   PublicBarberView,
+  PublicBarbershopView,
   ServiceView,
   SlotGrid,
 } from "@barber/contracts";
@@ -112,6 +113,13 @@ async function requestJson<T>(
 
   const data = (await response.json()) as T;
   return { ok: true, data };
+}
+
+/** Listable barbershops of the public directory (tenant picker step). */
+export async function fetchPublicBarbershops(
+  deps: BookingApiDeps,
+): Promise<BookingApiResult<PublicBarbershopView[]>> {
+  return requestJson<PublicBarbershopView[]>(deps, "tenant", "/api/public/barbershops");
 }
 
 /** Public services of the tenant (services step). */

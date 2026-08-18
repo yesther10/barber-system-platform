@@ -102,6 +102,62 @@ describe("booking flow container (mounted, injected fetch deps)", () => {
     replace.mockClear();
   });
 
+  it("renders loading then the tenant picker once the directory resolves", async () => {
+    const directory = [{ slug: "tesoura", name: "Tesoura E2E" }];
+    const fetchFn = vi.fn<typeof fetch>().mockResolvedValue(okJson(directory));
+
+    render(<BookingFlow selection={{ slug: "" }} deps={{ fetchFn }} />);
+
+    // In flight: the picker title is up but the list is still loading.
+    expect(screen.getByRole("heading", { name: "Escolha a barbearia" })).toBeTruthy();
+    expect(screen.getByText("Carregando...")).toBeTruthy();
+
+    // Resolved: the listable barbershops appear.
+    expect(await screen.findByText("Tesoura E2E")).toBeTruthy();
+    expect(fetchFn).toHaveBeenCalledTimes(1);
+    expect(String(fetchFn.mock.calls[0][0])).toBe("/api/public/barbershops");
+  });
+
+  it("shows the network error with a retry that refetches the directory", async () => {
+    const directory = [{ slug: "tesoura", name: "Tesoura E2E" }];
+    const fetchFn = vi
+      .fn<typeof fetch>()
+      .mockRejectedValueOnce(new Error("boom"))
+      .mockResolvedValueOnce(okJson(directory));
+
+    render(<BookingFlow selection={{ slug: "" }} deps={{ fetchFn }} />);
+
+    expect(
+      await screen.findByText("Não foi possível carregar os dados. Tente novamente."),
+    ).toBeTruthy();
+    expect(screen.queryByText("Tesoura E2E")).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: "Tentar novamente" }));
+
+    expect(await screen.findByText("Tesoura E2E")).toBeTruthy();
+    expect(fetchFn).toHaveBeenCalledTimes(2);
+    expect(
+      screen.queryByText("Não foi possível carregar os dados. Tente novamente."),
+    ).toBeNull();
+  });
+
+  it("selecting a barbershop replaces the URL with its slug, clearing downstream", async () => {
+    const directory = [
+      { slug: "tesoura", name: "Tesoura E2E" },
+      { slug: "barba-real", name: "Barba Real" },
+    ];
+    const fetchFn = vi.fn<typeof fetch>().mockResolvedValue(okJson(directory));
+
+    render(<BookingFlow selection={{ slug: "" }} deps={{ fetchFn }} />);
+    await screen.findByText("Barba Real");
+
+    // Select the SECOND entry: proves the clicked item's own slug drives the URL.
+    fireEvent.click(screen.getByRole("button", { name: "Barba Real" }));
+
+    await waitFor(() => expect(replace).toHaveBeenCalledTimes(1));
+    expect(String(replace.mock.calls[0][0])).toBe("/booking?slug=barba-real");
+  });
+
   it("renders loading then the slot grid once slots resolve", async () => {
     const fetchFn = vi
       .fn<typeof fetch>()

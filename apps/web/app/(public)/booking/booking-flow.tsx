@@ -16,7 +16,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import QRCode from "qrcode";
-import type { PixPaymentView, PublicBarberView, ServiceView } from "@barber/contracts";
+import type { PixPaymentView, PublicBarberView, PublicBarbershopView, ServiceView } from "@barber/contracts";
 import { translations } from "@/lib/i18n";
 import {
   bookingLoginPath,
@@ -32,6 +32,7 @@ import {
   createPixPayment,
   fetchPaymentStatus,
   fetchPublicBarbers,
+  fetchPublicBarbershops,
   fetchPublicServices,
   fetchSlots,
   type BookingApiDeps,
@@ -42,16 +43,22 @@ import { BR_TIMEZONE, formatDateKey, formatSlotLocal, todayInTz } from "@/lib/tz
 
 // --- presentational steps ---------------------------------------------------
 
-function StepList<T extends { id: string }>({
+function StepList<T>({
   items,
   renderItem,
   onSelect,
   emptyMessage,
+  keyFor = (item: T) => (item as { id?: string }).id ?? "",
+  valueFor = (item: T) => (item as { id?: string }).id ?? "",
 }: {
   items: T[];
   renderItem: (item: T) => React.ReactNode;
-  onSelect: (id: string) => void;
+  onSelect: (value: string) => void;
   emptyMessage: string;
+  /** Item key (defaults to `id` — picker items have no id). */
+  keyFor?: (item: T) => string;
+  /** Value passed to onSelect (defaults to `id` — picker items use slug). */
+  valueFor?: (item: T) => string;
 }) {
   if (items.length === 0) {
     return <p className="text-sm text-slate-500">{emptyMessage}</p>;
@@ -59,10 +66,10 @@ function StepList<T extends { id: string }>({
   return (
     <ul className="space-y-2">
       {items.map((item) => (
-        <li key={item.id}>
+        <li key={keyFor(item)}>
           <button
             type="button"
-            onClick={() => onSelect(item.id)}
+            onClick={() => onSelect(valueFor(item))}
             className="w-full rounded-2xl border border-slate-200 px-4 py-3 text-left transition hover:border-slate-900"
           >
             {renderItem(item)}
@@ -70,6 +77,28 @@ function StepList<T extends { id: string }>({
         </li>
       ))}
     </ul>
+  );
+}
+
+/** Tenant picker step: listable barbershops from the public directory. */
+export function TenantStep({
+  barbershops,
+  onSelect,
+}: {
+  barbershops: PublicBarbershopView[];
+  onSelect: (slug: string) => void;
+}) {
+  return (
+    <StepList
+      items={barbershops}
+      onSelect={onSelect}
+      keyFor={(shop) => shop.slug}
+      valueFor={(shop) => shop.slug}
+      emptyMessage={translations.booking.emptyBarbershops}
+      renderItem={(shop: PublicBarbershopView) => (
+        <span className="block font-medium text-slate-900">{shop.name}</span>
+      )}
+    />
   );
 }
 
@@ -336,6 +365,7 @@ export function barbersErrorForRender(
 }
 
 const stepTitle: Record<BookingStep, string> = {
+  tenant: translations.booking.stepTenant,
   services: translations.booking.stepServices,
   barbers: translations.booking.stepBarbers,
   "date-slot": translations.booking.stepDateSlot,
@@ -364,6 +394,10 @@ export function BookingFlow({ selection, deps }: BookingFlowProps) {
 
   const [services, setServices] = useState<ServiceView[] | null>(null);
   const [servicesError, setServicesError] = useState<string | null>(null);
+  /** Listable barbershops of the public directory (tenant picker step). */
+  const [barbershops, setBarbershops] = useState<PublicBarbershopView[] | null>(null);
+  /** Fetch error for the directory — shown with a retry on the picker step. */
+  const [barbershopsError, setBarbershopsError] = useState<string | null>(null);
   /** Barbers plus the service they belong to — rendered only on a service match. */
   const [barbers, setBarbers] = useState<{ serviceId: string; barbers: PublicBarberView[] } | null>(null);
   /** Fetch error plus the service it belongs to — rendered only on a service match. */
@@ -386,9 +420,35 @@ export function BookingFlow({ selection, deps }: BookingFlowProps) {
   const [copied, setCopied] = useState(false);
   /** Bumped to re-run the payment poll after a manual retry. */
   const [retryKey, setRetryKey] = useState(0);
+  /** Bumped to re-run the directory fetch after a manual retry (mirrors retryPayment). */
+  const [tenantRetryKey, setTenantRetryKey] = useState(0);
 
   const go = (action: BookingAction) =>
     router.replace(bookingPathFor(bookingReducer(selection, action)));
+
+  useEffect(() => {
+    if (step !== "tenant") return;
+    let cancelled = false;
+    fetchPublicBarbershops(depsRef).then((result) => {
+      if (cancelled) return;
+      if (result.ok) {
+        setBarbershops(result.data);
+        setBarbershopsError(null);
+      } else {
+        setBarbershops(null);
+        setBarbershopsError(result.message);
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [step, depsRef, tenantRetryKey]);
+
+  function retryBarbershops() {
+    setBarbershops(null);
+    setBarbershopsError(null);
+    setTenantRetryKey((key) => key + 1);
+  }
 
   useEffect(() => {
     if (step !== "services" || !selection.slug) return;
@@ -615,6 +675,30 @@ export function BookingFlow({ selection, deps }: BookingFlowProps) {
   return (
     <main className="mx-auto flex min-h-screen w-full max-w-md flex-col justify-center gap-6 px-6 py-12">
       <h1 className="text-2xl font-semibold text-slate-900">{stepTitle[step]}</h1>
+
+      {step === "tenant" ? (
+        barbershopsError ? (
+          <>
+            <p role="alert" className="rounded-2xl bg-rose-50 px-4 py-3 text-sm text-rose-700">
+              {barbershopsError}
+            </p>
+            <button
+              type="button"
+              onClick={retryBarbershops}
+              className="w-full rounded-full border border-slate-300 px-5 py-3 text-sm font-medium text-slate-700 transition hover:border-slate-900 hover:text-slate-900"
+            >
+              {translations.booking.retry}
+            </button>
+          </>
+        ) : barbershops === null ? (
+          <p className="text-sm text-slate-500">{translations.booking.loading}</p>
+        ) : (
+          <TenantStep
+            barbershops={barbershops}
+            onSelect={(slug) => go({ type: "select-barbershop", slug })}
+          />
+        )
+      ) : null}
 
       {step === "services" ? (
         servicesError ? (
