@@ -4,7 +4,7 @@ import { expect, test } from "@playwright/test";
 const FIXTURE_PATH = "/tmp/opencode/barber-system-platform-e2e.json";
 
 interface E2EFixture {
-  shop: { slug: string };
+  shop: { slug: string; name: string };
   barber: { id: string };
   service: { id: string };
   admin: { email: string; password: string };
@@ -62,6 +62,28 @@ async function browseToConfirm(
 
   await expect(page.getByRole("heading", { name: "Confirme seu agendamento" })).toBeVisible();
 }
+
+test("home CTA lands on the tenant picker; selecting a barbershop continues the flow", async ({
+  page,
+}) => {
+  const fixture = readFixture();
+
+  // Home CTA → /booking WITHOUT a slug → the directory picker is the first
+  // step (no dead-end "Carregando...").
+  await page.goto("/");
+  await page.getByRole("link", { name: "Agendar horário" }).click();
+  await expect(page.getByRole("heading", { name: "Escolha a barbearia" })).toBeVisible();
+
+  // The seeded listable barbershop shows by its visible name.
+  await expect(page.getByRole("button", { name: fixture.shop.name })).toBeVisible();
+
+  // Selecting it sets the slug and proceeds to the existing services step,
+  // which loads against the picked tenant.
+  await page.getByRole("button", { name: fixture.shop.name }).click();
+  await expect(page.getByRole("heading", { name: "Escolha o serviço" })).toBeVisible();
+  expect(new URL(page.url()).searchParams.get("slug")).toBe(fixture.shop.slug);
+  await expect(page.getByRole("button", { name: /Corte/ })).toBeVisible();
+});
 
 test("guest browses, passes the login gate, books, sees the Pix QR and the paid status", async ({
   page,

@@ -205,7 +205,7 @@ async function seedE2EFixture(prisma: PrismaClient) {
     FIXTURE_PATH,
     JSON.stringify(
       {
-        shop: { slug: shop.slug },
+        shop: { slug: shop.slug, name: shop.name },
         barber: { id: barber.id },
         service: { id: service.id },
         admin: { email: admin.email, password: adminPassword },
