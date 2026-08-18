@@ -24,7 +24,7 @@ Additive extension of the archived `catalog-booking-public-flow` flow. **PR1 (ba
 2. `bookingStepOf` — `if (!selection.slug) return "tenant"` after the appointmentId check
 3. `stepTitle` Record — `booking-flow.tsx:338` (exhaustive Record; TS fails until updated)
 4. `BookingApiFailure.step` — `booking-api.ts` (compile-time enforced via the union)
-5. `bookingReducer` — new `select-barbershop` action clearing downstream (`serviceId/barberId/date/slot`); codec unchanged (empty slug already dropped by `selectionToParams`)
+5. `bookingReducer` — new `select-barbershop` action clearing downstream (`serviceId/barberId/date/slot` **and `appointmentId`**); codec unchanged (empty slug already dropped by `selectionToParams`). **Amendment (archive, verified PR2)**: clearing `appointmentId` is REQUIRED — `bookingStepOf` checks `appointmentId` first, so keeping it would route to "waiting" with a foreign booking. Covered by the reducer test (`{ slug: "barba-real" }` clears every downstream field).
 6. Tests — `booking-state.test.ts`, `booking-api.test.ts`, `booking-flow.test.tsx`, `booking-flow.container.test.tsx`
 
 ## Data Flow
