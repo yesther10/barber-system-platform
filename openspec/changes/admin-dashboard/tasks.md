@@ -95,19 +95,19 @@ Prior: none. Follow-ups: #1b dashboard home. Out of scope: domain pages, backend
 
 Files: `apps/web/app/(admin)/dashboard/page.tsx` (modify placeholder), `apps/web/app/(admin)/dashboard/onboarding-card.tsx` (new), `apps/web/lib/i18n.ts` (dashboard strings).
 
-- [ ] **1b.1** PT-BR `admin.dashboard` i18n strings — [frontend · i18n]
+- [x] **1b.1** PT-BR `admin.dashboard` i18n strings — [frontend · i18n]
       Extend the `admin` section of `apps/web/lib/i18n.ts`: onboarding card strings (complete / missing areas / next step), day-metrics tile labels (appointments, pending confirmations, revenue), empty-day copy.
       No test-first — pure strings; asserted via 1b.2/1b.3 tests. Verify: `pnpm typecheck`.
       Deps: S1a merged (nav section exists). Done when: `translations.admin.dashboard.*` resolves.
       Coverage: admin-dashboard §Admin PT-BR Copy; §Dashboard Home; D12.
 
-- [ ] **1b.2** `onboarding-card.tsx` presentational card — [frontend · page]
+- [x] **1b.2** `onboarding-card.tsx` presentational card — [frontend · page]
       Create `apps/web/app/(admin)/dashboard/onboarding-card.tsx`: server presentational component — complete state / missing-area list with links / next-step.
       Tests (test-first): create render test with mocked `@/lib/onboarding` — incomplete snapshot lists missing areas; complete snapshot shows completion. Verify: `pnpm test apps/web/app/\(admin\)/dashboard/onboarding-card.test.tsx`.
       Deps: 1b.1. Done when: both states render from props.
       Coverage: admin-dashboard §Dashboard Home ("Incomplete onboarding" scenario).
 
-- [ ] **1b.3** `dashboard/page.tsx` server home — [frontend · page]
+- [x] **1b.3** `dashboard/page.tsx` server home — [frontend · page]
       Replace the placeholder with a thin `force-dynamic` server component calling libs directly (D2): `getOnboardingSnapshot(db, barbershopId)` → `<OnboardingCard/>`; `generateReport(db, barbershopId, { from: today, to: today, groupBy: "none" })` → rows[0] → day-metrics tiles (D3). Zeroed row when the day is empty.
       Tests (test-first): create `page.test.tsx` (`renderToStaticMarkup`, mocked libs) — incomplete onboarding list renders; zeroed day metrics render without error. Verify: `pnpm test apps/web/app/\(admin\)/dashboard/page.test.tsx`; `pnpm typecheck`.
       Deps: 1b.1–1b.2. Done when: home renders live API data via libs, empty day shows zeros, `pnpm test` green.
