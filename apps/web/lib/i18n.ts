@@ -69,6 +69,21 @@ const ptBR = {
       providerUnavailable: "O provedor de pagamento está indisponível. Tente novamente.",
     },
   },
+  admin: {
+    nav: {
+      dashboard: "Início",
+      services: "Serviços",
+      barbers: "Barbeiros",
+      schedules: "Horários",
+      exceptions: "Exceções",
+      reports: "Relatórios",
+      invites: "Convites",
+      agenda: "Agenda",
+      signOut: "Sair",
+      navLabel: "Navegação do painel administrativo",
+      signOutLabel: "Sair da conta",
+    },
+  },
 } as const;
 
 export const translations = ptBR;

@@ -1,5 +1,7 @@
 export const DEFAULT_AUTH_REDIRECT_PATH = "/booking";
 
+export const DEFAULT_ADMIN_REDIRECT_PATH = "/dashboard";
+
 export function sanitizeNextPath(input: string | null | undefined): string {
   if (!input) return DEFAULT_AUTH_REDIRECT_PATH;
 
@@ -18,4 +20,15 @@ export function sanitizeNextPath(input: string | null | undefined): string {
   } catch {
     return DEFAULT_AUTH_REDIRECT_PATH;
   }
+}
+
+/**
+ * Login URL for admin pages (design D1). Wraps `sanitizeNextPath` so the
+ * `next` param only carries safe internal paths; when the `x-pathname` header
+ * is absent (direct navigation) or unsafe, it falls back to `/dashboard`.
+ */
+export function adminLoginPath(pathname: string | null | undefined): string {
+  const next = sanitizeNextPath(pathname);
+  const target = next === DEFAULT_AUTH_REDIRECT_PATH ? DEFAULT_ADMIN_REDIRECT_PATH : next;
+  return `/login?next=${encodeURIComponent(target)}`;
 }

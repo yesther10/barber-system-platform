@@ -35,3 +35,19 @@ export function guardBookingSession(session: RouteSessionLike | null): BookingGu
   if (!session?.user?.id) return { ok: false, status: 401, code: "SESSION_REQUIRED" };
   return { ok: true, clientId: session.user.id };
 }
+
+export type PageGuardResult =
+  | { ok: true; barbershopId: string }
+  | { ok: false; redirectTo: string };
+
+/**
+ * Admin page guard (design D1): the `(admin)/layout.tsx` enforcement point.
+ * Mirrors `guardAdmin` but returns the page redirect target instead of an API
+ * status/code — missing session → login; wrong role or no tenant → home.
+ */
+export function requireAdminPage(session: RouteSessionLike | null): PageGuardResult {
+  if (!session?.user) return { ok: false, redirectTo: "/login" };
+  if (session.user.role !== "barbershop_admin") return { ok: false, redirectTo: "/" };
+  if (!session.user.barbershopId) return { ok: false, redirectTo: "/" };
+  return { ok: true, barbershopId: session.user.barbershopId };
+}
