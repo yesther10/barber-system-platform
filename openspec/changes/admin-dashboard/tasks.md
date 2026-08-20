@@ -136,13 +136,13 @@ Prior: #1a. Follow-ups: #2 services CRUD. Out of scope: domain pages.
 
 Split CONFIRMED by user (2026-08-19) — sub-PR S2a = tasks 2.1–2.2 (forecast ~250, ≤400). Files: `apps/web/lib/admin-api.ts` (new). S2b (tasks 2.3–2.6, services UI) is the next sub-PR below.
 
-- [ ] **2.1** `lib/admin-api.ts` core: `requestJson` + `messageFor` — [backend · lib]
+- [x] **2.1** `lib/admin-api.ts` core: `requestJson` + `messageFor` — [backend · lib]
       Create `apps/web/lib/admin-api.ts`: `AdminApiDeps { fetchFn }`, `requestJson` transport (mirrors `booking-api.ts`), `messageFor(code)` central error-code → PT-BR dictionary covering the full pinned table: `INVALID_INPUT`, `INVALID_BODY`, `SESSION_REQUIRED`, `FORBIDDEN_ROLE`, `TENANT_REQUIRED`, `BARBER_NOT_FOUND`, `TENANT_NOT_FOUND`, `PAYMENT_APPOINTMENT_NOT_FOUND`, `MANUAL_PAYMENT_ALREADY_PROCESSED`, `SERVICE_IN_USE` (+ unknown-code fallback).
       Tests (test-first): create `apps/web/lib/admin-api.test.ts` — `messageFor` maps every code to a PT-BR string, unknown code → generic fallback; `requestJson` 200 parse, 4xx code extraction, network/5xx error shape. Verify: `pnpm test apps/web/lib/admin-api.test.ts`.
       Deps: S1a. Done when: transport + full dictionary tested; every pinned code has a PT-BR message.
       Coverage: admin-dashboard §Admin Services Page (409 deactivate guidance); D11; design error-code table (all rows).
 
-- [ ] **2.2** admin-api services fetchers — [backend · lib]
+- [x] **2.2** admin-api services fetchers — [backend · lib]
       Extend `apps/web/lib/admin-api.ts`: `listAdminServices` (incl. inactive), `createService`, `updateService`, `deactivateService` with Zod `safeParse` of `ServiceInput`/`ServiceUpdate` and typed error surfacing.
       Tests (test-first): extend `admin-api.test.ts` — list returns active+inactive; create POSTs parsed payload; 409 `SERVICE_IN_USE` surfaced with code; invalid payload → client-side error, no fetch (mock asserts no call). Verify: `pnpm test apps/web/lib/admin-api.test.ts`.
       Deps: 2.1. Done when: all four fetchers tested incl. no-fetch-on-invalid.
