@@ -225,19 +225,19 @@ Prior: #1a, #1b, #2a. Follow-ups: #3a barbers backend. Out of scope: barbers, sc
 
 Read-side backend gap #1 (proposal risk "Slices 3/6 blocked by API gaps"). Files: `packages/contracts/src/{catalog.ts,index.ts}`, `apps/web/lib/catalog.ts`, `apps/web/app/api/admin/barbers/[id]/services/route.ts` (new GET).
 
-- [ ] **3a.1** Contracts: `BarberView` identity + assignment matrix — [backend · contracts]
+- [x] **3a.1** Contracts: `BarberView` identity + assignment matrix — [backend · contracts]
       Modify `packages/contracts/src/catalog.ts`: `BarberView` gains `userName: z.string().min(1).nullable()` and `userEmail: z.string().email()`; add `BarberServiceAssignment { serviceId, name, assigned }` and `BarberAssignmentMatrix = z.array(BarberServiceAssignment)`; export from `packages/contracts/src/index.ts`. No `CONTRACT_VERSION` bump (D13).
       Tests (test-first): extend `packages/contracts/src/catalog.test.ts` — BarberView parses with userName/userEmail; rejects missing userEmail; matrix parses mixed assigned flags; empty matrix valid. Verify: `pnpm test packages/contracts/src/catalog.test.ts`; `pnpm typecheck`.
       Deps: S2. Done when: schemas + exports green, no version bump.
       Coverage: catalog delta §Barber Service Assignment Matrix (all scenarios), §Barber Profiles ("Admin list includes user identity"); D13.
 
-- [ ] **3a.2** `lib/catalog.ts` enrichment + matrix lib — [backend · lib]
+- [x] **3a.2** `lib/catalog.ts` enrichment + matrix lib — [backend · lib]
       Modify `apps/web/lib/catalog.ts`: `listBarbers`/`toBarberView` include linked `user { name, email }` (nullable name); add `getBarberAssignmentMatrix(db, barbershopId, barberId)` → `BarberAssignmentMatrix` with every tenant service and `assigned` flag (no modification).
       Tests (test-first): extend `apps/web/lib/catalog.test.ts` (mocked prisma) — enrichment maps user name/email; tenant-scoped list excludes foreign barbers; matrix includes all tenant services with correct flags; unknown/foreign barber → not-found (no data leak). Verify: `pnpm test apps/web/lib/catalog.test.ts`.
       Deps: 3a.1. Done when: enrichment + matrix lib green incl. scoping.
       Coverage: catalog delta §Barber Profiles ("Admin list includes user identity"), §Barber Service Assignment Matrix (mixed / no-assignments scenarios).
 
-- [ ] **3a.3** GET `api/admin/barbers/[id]/services` route — [backend · route]
+- [x] **3a.3** GET `api/admin/barbers/[id]/services` route — [backend · route]
       Create `apps/web/app/api/admin/barbers/[id]/services/route.ts`: GET only (read-only), `guardAdmin` (401/403), parse `[id]` param, call matrix lib → 200 `BarberAssignmentMatrix`; unknown/foreign barber → 404 `BARBER_NOT_FOUND` (no data leak).
       Tests (test-first): create `route.test.ts` (`vi.doMock` of `@/lib/{auth,db,catalog}` — reports-route.test.ts pattern) — 200 mixed matrix; 200 all-unassigned; 404 unknown/foreign; 401/403 guard; no state mutation. Verify: `pnpm test "apps/web/app/api/admin/barbers/[id]/services/route.test.ts"`.
       Deps: 3a.2. Done when: all scenarios green; endpoint provably read-only.
