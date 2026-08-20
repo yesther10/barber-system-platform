@@ -87,15 +87,35 @@ export const BarberUpdate = BarberInput.partial();
 
 export type BarberUpdate = z.infer<typeof BarberUpdate>;
 
-/** Full barber profile as returned to admins. */
+/**
+ * Full barber profile as returned to admins. Carries the linked user's
+ * identity (name nullable — schema allows null; email required) so admin
+ * lists can identify barbers without a second lookup.
+ */
 export const BarberView = BarberInput.extend({
   id: z.string().min(1),
   userId: z.string().min(1),
+  userName: z.string().min(1).nullable(),
+  userEmail: z.string().email(),
   createdAt: z.string().datetime(),
   updatedAt: z.string().datetime(),
 });
 
 export type BarberView = z.infer<typeof BarberView>;
+
+/** One row of the read-only barber ↔ service assignment matrix. */
+export const BarberServiceAssignment = z.object({
+  serviceId: z.string().min(1),
+  name: z.string().min(1),
+  assigned: z.boolean(),
+});
+
+export type BarberServiceAssignment = z.infer<typeof BarberServiceAssignment>;
+
+/** Every tenant service with whether the barber is assigned to it. */
+export const BarberAssignmentMatrix = z.array(BarberServiceAssignment);
+
+export type BarberAssignmentMatrix = z.infer<typeof BarberAssignmentMatrix>;
 
 /** Public barber browse query — resolves the tenant by slug (catalog spec). */
 export const PublicBarberQuery = z.object({

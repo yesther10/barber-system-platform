@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  BarberAssignmentMatrix,
   BarberInput,
   BarberUpdate,
   BarberView,
@@ -179,12 +180,64 @@ describe("catalog contracts", () => {
       BarberView.safeParse({
         id: "brb_1",
         userId: "usr_1",
+        userName: "Carlos",
+        userEmail: "carlos@example.com",
         specialties: ["corte"],
         active: true,
         createdAt: "2026-08-01T10:00:00.000Z",
         updatedAt: "2026-08-01T10:00:00.000Z",
       }).success,
     ).toBe(true);
+  });
+
+  it("parses a barber view with the linked user identity (nullable name, required email)", () => {
+    const base = {
+      id: "brb_1",
+      userId: "usr_1",
+      specialties: ["corte"],
+      active: true,
+      createdAt: "2026-08-01T10:00:00.000Z",
+      updatedAt: "2026-08-01T10:00:00.000Z",
+    };
+
+    const withName = BarberView.safeParse({ ...base, userName: "Carlos", userEmail: "carlos@example.com" });
+    expect(withName.success).toBe(true);
+    if (withName.success) {
+      expect(withName.data.userName).toBe("Carlos");
+      expect(withName.data.userEmail).toBe("carlos@example.com");
+    }
+
+    // the user's name is nullable in the schema — null must parse
+    const nullName = BarberView.safeParse({ ...base, userName: null, userEmail: "carlos@example.com" });
+    expect(nullName.success).toBe(true);
+    if (nullName.success) expect(nullName.data.userName).toBeNull();
+
+    // the email is required and must be a valid email
+    expect(BarberView.safeParse({ ...base, userName: "Carlos" }).success).toBe(false);
+    expect(
+      BarberView.safeParse({ ...base, userName: "Carlos", userEmail: "not-an-email" }).success,
+    ).toBe(false);
+  });
+
+  it("parses the barber assignment matrix with mixed flags and validates entries", () => {
+    const mixed = BarberAssignmentMatrix.safeParse([
+      { serviceId: "svc_1", name: "Corte", assigned: true },
+      { serviceId: "svc_2", name: "Barba", assigned: false },
+    ]);
+    expect(mixed.success).toBe(true);
+    if (mixed.success) {
+      expect(mixed.data).toHaveLength(2);
+      expect(mixed.data[0]).toEqual({ serviceId: "svc_1", name: "Corte", assigned: true });
+      expect(mixed.data[1]).toEqual({ serviceId: "svc_2", name: "Barba", assigned: false });
+    }
+
+    // an empty matrix (barber with no services) is valid
+    expect(BarberAssignmentMatrix.safeParse([]).success).toBe(true);
+
+    // an entry missing the flag, name or id is rejected
+    expect(BarberAssignmentMatrix.safeParse([{ serviceId: "svc_1", name: "Corte" }]).success).toBe(false);
+    expect(BarberAssignmentMatrix.safeParse([{ serviceId: "svc_1", assigned: true }]).success).toBe(false);
+    expect(BarberAssignmentMatrix.safeParse([{ name: "Corte", assigned: true }]).success).toBe(false);
   });
 
   it("parses schedule create/update and views; exception create and view", () => {
