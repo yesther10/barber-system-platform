@@ -174,25 +174,25 @@ Prior: #1b. Follow-ups: #2b services UI.
 
 Split CONFIRMED by user (2026-08-19) — sub-PR S2b = tasks 2.3–2.6 (forecast ~230, ≤400). Files: `apps/web/app/(admin)/services/{page.tsx,services-manager.tsx}` (new), `apps/web/app/(admin)/services/` i18n, `apps/web/e2e/services.spec.ts` (new).
 
-- [ ] **2.3** PT-BR `admin.services` i18n strings — [frontend · i18n]
+^- [x] **2.3** PT-BR `admin.services` i18n strings — [frontend · i18n]
       Extend the `admin` section of `apps/web/lib/i18n.ts`: list/create/edit/deactivate labels, PT-BR empty state, 409 deactivate guidance message, field labels (name, price BRL, duration, active).
       No test-first — pure strings; asserted via 2.4/2.5 tests. Verify: `pnpm typecheck`.
       Deps: 2.1. Done when: `translations.admin.services.*` resolves.
       Coverage: admin-dashboard §Admin PT-BR Copy; §Admin Services Page (PT-BR empty state, deactivate guidance); D12.
 
-- [ ] **2.4** `services-manager.tsx` container — [frontend · manager]
+^- [x] **2.4** `services-manager.tsx` container — [frontend · manager]
       Create `apps/web/app/(admin)/services/services-manager.tsx`: list (+inactive), create/edit form, deactivate action; empty PT-BR state; 409 → deactivate guidance; injected `fetchFn` deps (login-form / booking-flow DI pattern).
       Tests (test-first): create container test (`// @vitest-environment happy-dom` + @testing-library/react, `vi.mock("next/navigation")`, `afterEach(cleanup)` — booking-flow.container.test.tsx pattern) — create submit POSTs and list updates; 409 shows deactivate guidance; empty list shows PT-BR empty state. Verify: `pnpm test apps/web/app/\(admin\)/services/services-manager.container.test.tsx`.
       Deps: 2.2–2.3. Done when: create/409/empty scenarios green.
       Coverage: admin-dashboard §Admin Services Page ("Create and list a service", "Empty service list", deactivate guidance).
 
-- [ ] **2.5** `services/page.tsx` server page — [frontend · page]
+^- [x] **2.5** `services/page.tsx` server page — [frontend · page]
       Create `apps/web/app/(admin)/services/page.tsx`: thin server component rendering `<ServicesManager/>` with server-side fetch (`listAdminServices`).
       Tests (test-first): create page.test.tsx (`renderToStaticMarkup`, mocked manager/libs) — renders manager under guard. Verify: `pnpm test apps/web/app/\(admin\)/services/page.test.tsx`.
       Deps: 2.4. Done when: page renders under layout guard.
       Coverage: admin-dashboard §Admin Services Page; D1 (guard applies).
 
-- [ ] **2.6** E2E `services.spec.ts` — [e2e]
+^- [x] **2.6** E2E `services.spec.ts` — [e2e]
       Create `apps/web/e2e/services.spec.ts`: seeded admin logs in → creates a service (name/price/duration) → appears in the list. Extend `apps/web/e2e/start-server.ts` fixture only if a stable pre-existing service list is needed (keep fixture additive).
       Tests: the spec itself (Playwright). Verify: `pnpm exec playwright test -c apps/web/playwright.config.ts services`.
       Deps: 2.4–2.5. Done when: spec green against seeded fixture.

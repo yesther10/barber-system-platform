@@ -105,6 +105,37 @@ const ptBR = {
         emptyDay: "Nenhum agendamento para hoje ainda.",
       },
     },
+    services: {
+      title: "Serviços",
+      empty: "Nenhum serviço cadastrado ainda.",
+      fields: {
+        name: "Nome",
+        namePlaceholder: "Ex.: Corte de cabelo",
+        priceBRL: "Preço (R$)",
+        durationMinutes: "Duração (minutos)",
+        active: "Ativo",
+      },
+      create: {
+        title: "Novo serviço",
+        submit: "Criar serviço",
+        submitting: "Criando...",
+      },
+      edit: {
+        title: "Editar serviço",
+        submit: "Salvar alterações",
+        submitting: "Salvando...",
+        cancel: "Cancelar",
+      },
+      actions: {
+        edit: "Editar",
+        deactivate: "Desativar",
+        delete: "Excluir",
+        deactivating: "Desativando...",
+      },
+      inactive: "Inativo",
+      deactivateGuidance:
+        "Este serviço possui agendamentos e não pode ser excluído. Desative-o para deixá-lo indisponível para novos agendamentos.",
+    },
   },
 } as const;
 
