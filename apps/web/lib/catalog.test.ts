@@ -9,7 +9,10 @@ import { Prisma } from "@barber/db";
 import type { Barber, PrismaClient, Schedule, ScheduleException, Service } from "@barber/db";
 import {
   assertWindowOrder,
+  BarberNotFoundError,
   dateKeyOf,
+  getBarberAssignmentMatrix,
+  listBarbers,
   listPublicBarbershops,
   toBarberView,
   toExceptionView,
@@ -73,9 +76,32 @@ describe("toBarberView / toScheduleView / toExceptionView / dateKeyOf", () => {
       active: true,
       createdAt: at("2026-08-01T10:00:00.000Z"),
       updatedAt: at("2026-08-01T10:00:00.000Z"),
-    } as Barber);
-    expect(view).toMatchObject({ id: "brb_1", userId: "usr_1", specialties: ["corte", "barba"], active: true });
+      user: { name: "Carlos", email: "carlos@example.com" },
+    } as Barber & { user: { name: string | null; email: string } });
+    expect(view).toMatchObject({
+      id: "brb_1",
+      userId: "usr_1",
+      userName: "Carlos",
+      userEmail: "carlos@example.com",
+      specialties: ["corte", "barba"],
+      active: true,
+    });
     expect(view.bio).toBeUndefined();
+  });
+
+  it("maps a nullable linked user name and keeps the email", () => {
+    const view = toBarberView({
+      id: "brb_2",
+      userId: "usr_2",
+      specialties: ["corte"],
+      bio: null,
+      active: true,
+      createdAt: at("2026-08-01T10:00:00.000Z"),
+      updatedAt: at("2026-08-01T10:00:00.000Z"),
+      user: { name: null, email: "ana@example.com" },
+    } as Barber & { user: { name: string | null; email: string } });
+    expect(view.userName).toBeNull();
+    expect(view.userEmail).toBe("ana@example.com");
   });
 
   it("maps a schedule entry with its weekday and window", () => {
@@ -152,5 +178,145 @@ describe("listPublicBarbershops", () => {
     expect(shops[0]).not.toHaveProperty("id");
     expect(shops[0]).not.toHaveProperty("userId");
     expect(shops[0]).not.toHaveProperty("pixProvider");
+  });
+});
+
+describe("listBarbers", () => {
+  it("includes the linked user name/email and stays tenant-scoped", async () => {
+    const findMany = vi.fn().mockResolvedValue([
+      {
+        id: "brb_1",
+        userId: "usr_1",
+        specialties: ["corte"],
+        bio: null,
+        active: true,
+        createdAt: at("2026-08-01T10:00:00.000Z"),
+        updatedAt: at("2026-08-01T10:00:00.000Z"),
+        user: { name: "Carlos", email: "carlos@example.com" },
+      },
+      {
+        id: "brb_2",
+        userId: "usr_2",
+        specialties: ["barba"],
+        bio: null,
+        active: true,
+        createdAt: at("2026-08-01T10:00:00.000Z"),
+        updatedAt: at("2026-08-01T10:00:00.000Z"),
+        user: { name: null, email: "ana@example.com" },
+      },
+    ]);
+    const db = { barber: { findMany } } as unknown as PrismaClient;
+
+    const barbers = await listBarbers(db, "bshp_1", { includeInactive: true });
+
+    // tenant scoping is enforced in the query — foreign barbers never load
+    expect(findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { barbershopId: "bshp_1" },
+        include: { user: { select: { name: true, email: true } } },
+      }),
+    );
+    expect(barbers).toHaveLength(2);
+    expect(barbers[0]).toMatchObject({ id: "brb_1", userName: "Carlos", userEmail: "carlos@example.com" });
+    expect(barbers[1]).toMatchObject({ userName: null, userEmail: "ana@example.com" });
+  });
+
+  it("filters to active barbers by default", async () => {
+    const findMany = vi.fn().mockResolvedValue([]);
+    const db = { barber: { findMany } } as unknown as PrismaClient;
+
+    await listBarbers(db, "bshp_1");
+
+    expect(findMany).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { barbershopId: "bshp_1", active: true } }),
+    );
+  });
+});
+
+describe("getBarberAssignmentMatrix", () => {
+  it("returns every tenant service with the correct assigned flag (mixed)", async () => {
+    const findBarber = vi.fn().mockResolvedValue({ id: "brb_1", barbershopId: "bshp_1" });
+    const findServices = vi.fn().mockResolvedValue([
+      { id: "svc_1", name: "Corte" },
+      { id: "svc_2", name: "Barba" },
+      { id: "svc_3", name: "Sobrancelha" },
+    ]);
+    const findAssignments = vi.fn().mockResolvedValue([{ serviceId: "svc_1" }, { serviceId: "svc_3" }]);
+    const db = {
+      barber: { findFirst: findBarber },
+      service: { findMany: findServices },
+      barberService: { findMany: findAssignments },
+    } as unknown as PrismaClient;
+
+    const matrix = await getBarberAssignmentMatrix(db, "bshp_1", "brb_1");
+
+    expect(findBarber).toHaveBeenCalledWith({ where: { id: "brb_1", barbershopId: "bshp_1" } });
+    expect(matrix).toEqual([
+      { serviceId: "svc_1", name: "Corte", assigned: true },
+      { serviceId: "svc_2", name: "Barba", assigned: false },
+      { serviceId: "svc_3", name: "Sobrancelha", assigned: true },
+    ]);
+  });
+
+  it("marks every tenant service unassigned for a barber with no assignments", async () => {
+    const findBarber = vi.fn().mockResolvedValue({ id: "brb_1", barbershopId: "bshp_1" });
+    const findServices = vi.fn().mockResolvedValue([
+      { id: "svc_1", name: "Corte" },
+      { id: "svc_2", name: "Barba" },
+    ]);
+    const findAssignments = vi.fn().mockResolvedValue([]);
+    const db = {
+      barber: { findFirst: findBarber },
+      service: { findMany: findServices },
+      barberService: { findMany: findAssignments },
+    } as unknown as PrismaClient;
+
+    const matrix = await getBarberAssignmentMatrix(db, "bshp_1", "brb_1");
+
+    expect(matrix).toEqual([
+      { serviceId: "svc_1", name: "Corte", assigned: false },
+      { serviceId: "svc_2", name: "Barba", assigned: false },
+    ]);
+  });
+
+  it("throws BarberNotFoundError for an unknown or foreign barber and fetches nothing", async () => {
+    const findBarber = vi.fn().mockResolvedValue(null);
+    const findServices = vi.fn();
+    const findAssignments = vi.fn();
+    const db = {
+      barber: { findFirst: findBarber },
+      service: { findMany: findServices },
+      barberService: { findMany: findAssignments },
+    } as unknown as PrismaClient;
+
+    await expect(getBarberAssignmentMatrix(db, "bshp_1", "brb_estranho")).rejects.toThrow(BarberNotFoundError);
+
+    // no service or assignment data is fetched for an out-of-tenant barber
+    expect(findServices).not.toHaveBeenCalled();
+    expect(findAssignments).not.toHaveBeenCalled();
+  });
+
+  it("is read-only: only fetches, never creates, updates or deletes", async () => {
+    const findBarber = vi.fn().mockResolvedValue({ id: "brb_1", barbershopId: "bshp_1" });
+    const findServices = vi.fn().mockResolvedValue([{ id: "svc_1", name: "Corte" }]);
+    const findAssignments = vi.fn().mockResolvedValue([{ serviceId: "svc_1" }]);
+    const create = vi.fn();
+    const update = vi.fn();
+    const upsert = vi.fn();
+    const remove = vi.fn();
+    const db = {
+      barber: { findFirst: findBarber, create, update, delete: remove },
+      service: { findMany: findServices, create, update, delete: remove },
+      barberService: { findMany: findAssignments, create, upsert, update, deleteMany: remove, delete: remove },
+    } as unknown as PrismaClient;
+
+    await getBarberAssignmentMatrix(db, "bshp_1", "brb_1");
+
+    expect(findServices).toHaveBeenCalled();
+    expect(findAssignments).toHaveBeenCalled();
+    expect(create).not.toHaveBeenCalled();
+    expect(update).not.toHaveBeenCalled();
+    expect(upsert).not.toHaveBeenCalled();
+    expect(remove).not.toHaveBeenCalled();
   });
 });

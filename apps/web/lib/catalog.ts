@@ -8,7 +8,7 @@
  * scoped to the caller's `barbershopId`; a resource owned by another tenant
  * resolves to NotFound (404) so cross-tenant access never leaks data.
  */
-import type { Barber, PrismaClient, Schedule, ScheduleException, Service } from "@barber/db";
+import type { Barber, PrismaClient, Schedule, ScheduleException, Service, User } from "@barber/db";
 import {
   BarberUpdate,
   CreateBarberInput,
@@ -19,6 +19,7 @@ import {
   ServiceUpdate,
 } from "@barber/contracts";
 import type {
+  BarberAssignmentMatrix,
   BarberView,
   PublicBarberView,
   PublicBarbershopView,
@@ -106,11 +107,17 @@ export function toServiceView(service: Service): ServiceView {
   };
 }
 
-/** Maps a Prisma barber row to the contract view. */
-export function toBarberView(barber: Barber): BarberView {
+/**
+ * Maps a Prisma barber row (with the linked user relation) to the contract
+ * view. The user's name is nullable in the schema; the email is required —
+ * callers must include the `user` relation in their query.
+ */
+export function toBarberView(barber: Barber & { user: Pick<User, "name" | "email"> }): BarberView {
   return {
     id: barber.id,
     userId: barber.userId,
+    userName: barber.user.name ?? null,
+    userEmail: barber.user.email,
     specialties: barber.specialties as string[],
     bio: barber.bio ?? undefined,
     active: barber.active,
@@ -213,6 +220,7 @@ export async function listBarbers(
 ): Promise<BarberView[]> {
   const rows = await db.barber.findMany({
     where: { barbershopId, ...(opts.includeInactive ? {} : { active: true }) },
+    include: { user: { select: { name: true, email: true } } },
     orderBy: { createdAt: "asc" },
   });
   return rows.map(toBarberView);
@@ -243,6 +251,7 @@ export async function createBarber(
       bio: parsed.data.bio,
       active: parsed.data.active,
     },
+    include: { user: { select: { name: true, email: true } } },
   });
   return toBarberView(row);
 }
@@ -257,7 +266,11 @@ export async function updateBarber(
   const parsed = BarberUpdate.safeParse(patch);
   if (!parsed.success) throw new InvalidInputError();
   await scopedBarber(db, barbershopId, id);
-  const row = await db.barber.update({ where: { id }, data: parsed.data });
+  const row = await db.barber.update({
+    where: { id },
+    data: parsed.data,
+    include: { user: { select: { name: true, email: true } } },
+  });
   return toBarberView(row);
 }
 
@@ -287,6 +300,37 @@ export async function unassignServiceFromBarber(
   await scopedBarber(db, barbershopId, barberId);
   await scopedService(db, barbershopId, serviceId);
   await db.barberService.deleteMany({ where: { barberId, serviceId } });
+}
+
+/**
+ * Read-only assignment matrix for a tenant barber: every service of the
+ * tenant with whether the barber is assigned to it. Never mutates data.
+ * An unknown or foreign barber resolves to `BarberNotFoundError` (404) so
+ * cross-tenant assignment data never leaks.
+ */
+export async function getBarberAssignmentMatrix(
+  db: PrismaClient,
+  barbershopId: string,
+  barberId: string,
+): Promise<BarberAssignmentMatrix> {
+  await scopedBarber(db, barbershopId, barberId);
+  const [services, assignments] = await Promise.all([
+    db.service.findMany({
+      where: { barbershopId },
+      orderBy: { createdAt: "asc" },
+      select: { id: true, name: true },
+    }),
+    db.barberService.findMany({
+      where: { barberId },
+      select: { serviceId: true },
+    }),
+  ]);
+  const assignedIds = new Set(assignments.map((a) => a.serviceId));
+  return services.map((service) => ({
+    serviceId: service.id,
+    name: service.name,
+    assigned: assignedIds.has(service.id),
+  }));
 }
 
 /** Weekly schedule entries of the tenant, optionally filtered by barber. */
