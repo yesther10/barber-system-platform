@@ -83,6 +83,28 @@ const ptBR = {
       navLabel: "Navegação do painel administrativo",
       signOutLabel: "Sair da conta",
     },
+    dashboard: {
+      title: "Visão geral",
+      onboarding: {
+        completeTitle: "Configuração completa",
+        completeMessage: "Sua barbearia está pronta para receber agendamentos.",
+        missingTitle: "Para começar a receber agendamentos, complete:",
+        nextStep: "Próximo passo",
+        areas: {
+          services: "Serviços",
+          barbers: "Barbeiros",
+          schedules: "Horários",
+          pix: "Pix",
+        },
+      },
+      metrics: {
+        title: "Resumo do dia",
+        appointments: "Agendamentos hoje",
+        pendingConfirmations: "Confirmações pendentes",
+        revenue: "Faturamento hoje",
+        emptyDay: "Nenhum agendamento para hoje ainda.",
+      },
+    },
   },
 } as const;
 
