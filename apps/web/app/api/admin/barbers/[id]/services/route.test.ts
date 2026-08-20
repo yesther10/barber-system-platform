@@ -110,11 +110,16 @@ describe("admin barber assignment matrix route", () => {
   });
 
   it("returns 401 SESSION_REQUIRED without a session and never reads the matrix", async () => {
-    const { getBarberAssignmentMatrix } = mockDeps({});
+    const getBarberAssignmentMatrix = vi.fn();
+    const BarberNotFoundError = class BarberNotFoundError extends Error {
+      code = "BARBER_NOT_FOUND" as const;
+    };
     vi.doMock("@/lib/auth", () => ({ auth: vi.fn().mockResolvedValue(null) }));
+    vi.doMock("@/lib/db", () => ({ getPrisma: () => ({}) }));
     vi.doMock("@/lib/route-auth", () => ({
       guardAdmin: vi.fn().mockReturnValue({ ok: false, status: 401, code: "SESSION_REQUIRED" }),
     }));
+    vi.doMock("@/lib/catalog", () => ({ getBarberAssignmentMatrix, BarberNotFoundError }));
 
     const response = await getMatrix("brb_1");
 
@@ -124,11 +129,16 @@ describe("admin barber assignment matrix route", () => {
   });
 
   it("returns 403 FORBIDDEN_ROLE for a non-admin session", async () => {
-    mockDeps({});
+    const getBarberAssignmentMatrix = vi.fn();
+    const BarberNotFoundError = class BarberNotFoundError extends Error {
+      code = "BARBER_NOT_FOUND" as const;
+    };
     vi.doMock("@/lib/auth", () => ({ auth: vi.fn().mockResolvedValue({ user: { role: "client" } }) }));
+    vi.doMock("@/lib/db", () => ({ getPrisma: () => ({}) }));
     vi.doMock("@/lib/route-auth", () => ({
       guardAdmin: vi.fn().mockReturnValue({ ok: false, status: 403, code: "FORBIDDEN_ROLE" }),
     }));
+    vi.doMock("@/lib/catalog", () => ({ getBarberAssignmentMatrix, BarberNotFoundError }));
 
     const response = await getMatrix("brb_1");
 
