@@ -1,24 +1,27 @@
 import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
 import { requireAdminPage } from "@/lib/route-auth";
-import { listAdminServices } from "@/lib/admin-api";
+import { getPrisma } from "@/lib/db";
+import { listServices } from "@/lib/catalog";
 import ServicesManager from "./services-manager";
 
 export const dynamic = "force-dynamic";
 
 /**
- * Admin services page (design: services page, D1). Thin server component:
- * the layout already guards the route; this page re-checks the session for
- * the tenant id, fetches the full service list server-side through the
- * admin-api fetcher, and hands it to the client manager — a failed server
- * fetch degrades to an empty list so the manager's PT-BR empty state shows.
+ * Admin services page (design: services page, D1). Thin server component
+ * following the dashboard-home pattern (D2): the layout already guards the
+ * route; this page re-checks the session for the tenant id, loads the full
+ * service list (including inactive ones) server-side through the catalog
+ * lib — the same source the `/api/admin/services` route uses — and hands it
+ * to the client manager. A tenant with no services yields the empty list,
+ * which renders the manager's PT-BR empty state.
  */
 export default async function ServicesPage() {
   const session = await auth();
   const guard = requireAdminPage(session);
   if (!guard.ok) redirect(guard.redirectTo);
 
-  const result = await listAdminServices({ fetchFn: fetch });
+  const services = await listServices(getPrisma(), guard.barbershopId, { includeInactive: true });
 
-  return <ServicesManager initialServices={result.ok ? result.data : []} />;
+  return <ServicesManager initialServices={services} />;
 }

@@ -4,16 +4,17 @@ import { renderToStaticMarkup } from "react-dom/server";
 
 /**
  * Services page (admin-dashboard design: services page, D1). Thin server
- * component: `requireAdminPage` guard + server-side `listAdminServices`
- * fetch → `<ServicesManager initialServices=.../>`. The manager module is
- * mocked here (its own behavior is covered by the container suite); this
- * suite proves the page's data flow — the fetched services reach the
- * manager, and a failed server fetch degrades to the empty list.
+ * component following the dashboard-home pattern (D2): `requireAdminPage`
+ * guard + server-side `listServices(db, barbershopId, {includeInactive})`
+ * → `<ServicesManager initialServices=.../>`. The manager module is mocked
+ * here (its own behavior is covered by the container suite); this suite
+ * proves the page's data flow — the loaded services reach the manager, and
+ * a tenant with no services reaches the PT-BR empty state.
  */
 
 const adminSession = { user: { id: "u1", role: "barbershop_admin", barbershopId: "bshp_1" } };
 
-const fetchedServices = [
+const loadedServices = [
   { id: "svc_1", name: "Corte" },
   { id: "svc_2", name: "Barba" },
 ];
@@ -34,8 +35,9 @@ function mockManager() {
 function mockPageDeps(listResult: unknown) {
   vi.doMock("@/lib/auth", () => ({ auth: vi.fn().mockResolvedValue(adminSession) }));
   vi.doMock("next/navigation", () => ({ redirect: vi.fn() }));
-  vi.doMock("@/lib/admin-api", () => ({
-    listAdminServices: vi.fn().mockResolvedValue(listResult),
+  vi.doMock("@/lib/db", () => ({ getPrisma: vi.fn() }));
+  vi.doMock("@/lib/catalog", () => ({
+    listServices: vi.fn().mockResolvedValue(listResult),
   }));
 }
 
@@ -45,8 +47,8 @@ describe("services page", () => {
     vi.clearAllMocks();
   });
 
-  it("renders the manager with the services fetched server-side under the admin guard", async () => {
-    mockPageDeps({ ok: true, data: fetchedServices });
+  it("renders the manager with the services loaded server-side under the admin guard", async () => {
+    mockPageDeps(loadedServices);
     mockManager();
 
     const { default: ServicesPage } = await import("./page");
@@ -57,8 +59,8 @@ describe("services page", () => {
     expect(html).toContain("Barba");
   });
 
-  it("renders the PT-BR empty state when the server-side fetch fails", async () => {
-    mockPageDeps({ ok: false, code: "NETWORK", message: "Falha" });
+  it("renders the PT-BR empty state when the tenant has no services", async () => {
+    mockPageDeps([]);
     mockManager();
 
     const { default: ServicesPage } = await import("./page");
