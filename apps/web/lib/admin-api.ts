@@ -9,6 +9,9 @@
  * user input validate the payload client-side with the shared Zod contracts
  * and fail without fetching.
  */
+import { ServiceInput, ServiceUpdate } from "@barber/contracts";
+import type { ServiceView } from "@barber/contracts";
+
 export interface AdminApiDeps {
   fetchFn: typeof fetch;
 }
@@ -95,4 +98,51 @@ export async function requestJson<T>(
 
   const data = (await response.json()) as T;
   return { ok: true, data };
+}
+
+function clientInvalidInput(): AdminApiFailure {
+  return { ok: false, code: "INVALID_INPUT", message: messageFor("INVALID_INPUT") };
+}
+
+/** All tenant services including inactive ones (admin services page). */
+export async function listAdminServices(deps: AdminApiDeps): Promise<AdminApiResult<ServiceView[]>> {
+  return requestJson<ServiceView[]>(deps, "/api/admin/services");
+}
+
+/** Creates a service; the payload is validated client-side before fetching. */
+export async function createService(
+  deps: AdminApiDeps,
+  input: unknown,
+): Promise<AdminApiResult<ServiceView>> {
+  const parsed = ServiceInput.safeParse(input);
+  if (!parsed.success) return clientInvalidInput();
+  return requestJson<ServiceView>(deps, "/api/admin/services", {
+    method: "POST",
+    body: parsed.data,
+  });
+}
+
+/** Updates a service (including deactivation); the patch is validated client-side. */
+export async function updateService(
+  deps: AdminApiDeps,
+  id: string,
+  patch: unknown,
+): Promise<AdminApiResult<ServiceView>> {
+  const parsed = ServiceUpdate.safeParse(patch);
+  if (!parsed.success) return clientInvalidInput();
+  return requestJson<ServiceView>(deps, `/api/admin/services/${encodeURIComponent(id)}`, {
+    method: "PUT",
+    body: parsed.data,
+  });
+}
+
+/**
+ * Deactivates a service — the supported retirement path (catalog spec): it
+ * becomes unbookable without altering existing appointments.
+ */
+export async function deactivateService(
+  deps: AdminApiDeps,
+  id: string,
+): Promise<AdminApiResult<ServiceView>> {
+  return updateService(deps, id, { active: false });
 }
